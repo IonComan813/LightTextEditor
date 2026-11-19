@@ -23,7 +23,13 @@ public class BackgroundModeTests
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static (Window, BackgroundMode, FakeActions) Create()
+    /// <summary>等到某个操作发生（最多 5 秒；测试机繁忙时定时器可能晚触发）。</summary>
+    private static async Task WaitForAsync(FakeActions actions, string entry)
+    {
+        for (int i = 0; i < 100 && !actions.Log.Contains(entry); i++) await WaitAsync(50);
+    }
+
+    private static (Window, BackgroundMode, FakeActions) Create(int inactiveDelayMs = 150)
     {
         var window = new Window();
         window.Show();
@@ -32,7 +38,7 @@ public class BackgroundModeTests
         var mode = new BackgroundMode(window, actions)
         {
             MinimizedDelay = TimeSpan.FromMilliseconds(50),
-            InactiveDelay = TimeSpan.FromMilliseconds(150),
+            InactiveDelay = TimeSpan.FromMilliseconds(inactiveDelayMs),
         };
         return (window, mode, actions);
     }
@@ -43,7 +49,7 @@ public class BackgroundModeTests
         var (_, mode, actions) = Create();
         mode.SetActive(false);
         Assert.Equal(["eco"], actions.Log);
-        await WaitAsync(300);
+        await WaitForAsync(actions, "release");
         Assert.Equal(["eco", "release"], actions.Log); // 不在最小化：不收缩工作集
         await WaitAsync(300);
         Assert.Single(actions.Log, "release");          // 只做一次
@@ -55,7 +61,8 @@ public class BackgroundModeTests
     [AvaloniaFact]
     public async Task QuickSwitchBack_DoesNotReleaseMemory()
     {
-        var (_, mode, actions) = Create();
+        // 延迟设得远大于测试中的等待时间，测试机繁忙时也不会误触发
+        var (_, mode, actions) = Create(inactiveDelayMs: 5000);
         mode.SetActive(false);
         await WaitAsync(30);
         mode.SetActive(true);
@@ -71,7 +78,7 @@ public class BackgroundModeTests
         Dispatcher.UIThread.RunJobs();
         Assert.True(mode.IsInBackground);
         Assert.Equal(["lowmem", "eco+min"], actions.Log);
-        await WaitAsync(200);
+        await WaitForAsync(actions, "trim");
         Assert.Equal(["lowmem", "eco+min", "release", "trim"], actions.Log);
 
         window.WindowState = WindowState.Normal;
@@ -83,7 +90,7 @@ public class BackgroundModeTests
         actions.Log.Clear();
         window.WindowState = WindowState.Minimized;
         Dispatcher.UIThread.RunJobs();
-        await WaitAsync(200);
+        await WaitForAsync(actions, "release");
         Assert.Contains("release", actions.Log);
     }
 
@@ -92,7 +99,7 @@ public class BackgroundModeTests
     {
         var (_, mode, actions) = Create();
         mode.SetActive(false);
-        await WaitAsync(300);
+        await WaitForAsync(actions, "release");
         Assert.Equal(["eco", "release"], actions.Log);
         mode.SetMinimized(true);
         await WaitAsync(200);
