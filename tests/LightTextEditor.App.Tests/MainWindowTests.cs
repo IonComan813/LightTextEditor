@@ -401,4 +401,21 @@ public class MainWindowTests
         Dispatcher.UIThread.RunJobs();
         Assert.NotSame(second, window.ActiveTab);
     }
+
+    [AvaloniaFact]
+    public async Task StartingWithMissingFile_ShowsError_ThenLeavesBlankTab()
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "lib-" + Guid.NewGuid().ToString("N"));
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        var window = new MainWindow();
+        window.Initialize([Path.Combine(library, "不存在.md")]); // 窗口显示之前
+        window.Show();
+        await Task.Delay(50);
+        var dialog = FindDialog(window); // 窗口显示后弹出“找不到文件”
+        Assert.Equal("无法打开", dialog.Title);
+        dialog.Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.None);
+        for (int i = 0; i < 10 && window.AllTabs().Count == 0; i++) { await Task.Delay(50); Dispatcher.UIThread.RunJobs(); }
+        Assert.Single(window.AllTabs());
+        Assert.True(window.ActiveTab!.Doc.IsUntitled);
+    }
 }

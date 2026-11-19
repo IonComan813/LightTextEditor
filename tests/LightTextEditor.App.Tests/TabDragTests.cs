@@ -102,7 +102,11 @@ public class TabDragTests
             window.MouseMove(start + (mid - start) * (i / 8.0), RawInputModifiers.LeftMouseButton);
             Dispatcher.UIThread.RunJobs();
         }
-        Assert.Equal(new[] { b, a, c }, window.AllTabs());
+        // 拖动过程中顺序不变（松开时才调整），b 已滑到左边让位
+        Assert.Equal(new[] { a, b, c }, window.AllTabs());
+        await Task.Delay(250);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Center(window, b).X < Center(window, a).X);
         // 被拖动的标签中心跟着鼠标，盖在其他标签上面
         Assert.InRange(Center(window, a).X, mid.X - 2, mid.X + 2);
         Assert.True(a.TabItem.ZIndex > b.TabItem.ZIndex);

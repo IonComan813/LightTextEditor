@@ -18,7 +18,10 @@ internal static class Program
 
         App.StartupArgs = args;
         App.SingleInstance = instance;
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        var builder = BuildAvaloniaApp();
+        if (Environment.GetEnvironmentVariable("LTE_LOG") == "1")
+            builder = builder.LogToTextWriter(Console.Out, Avalonia.Logging.LogEventLevel.Warning);
+        return builder.StartWithClassicDesktopLifetime(args);
     }
 
     // 设计器也会调用此方法。
@@ -34,4 +37,5 @@ internal static class Program
             })
 #pragma warning restore AVALONIA_X11_FORCE_CSD
             .LogToTrace();
+
 }

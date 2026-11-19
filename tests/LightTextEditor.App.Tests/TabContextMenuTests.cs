@@ -13,7 +13,7 @@ public class TabContextMenuTests
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RightClickOnTab_OpensContextMenu(bool tabItemHandlesRelease)
+    public async Task RightClickOnTab_OpensContextMenu(bool tabItemHandlesRelease)
     {
         App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "ctx-" + Guid.NewGuid().ToString("N")), RestoreSession = false };
         var window = new MainWindow { Width = 1000, Height = 500 };
@@ -32,7 +32,15 @@ public class TabContextMenuTests
         window.MouseUp(p, MouseButton.Right);
         Dispatcher.UIThread.RunJobs();
 
+        await Task.Delay(50);
+        Dispatcher.UIThread.RunJobs();
         Assert.NotNull(window.TabContextMenu);
         Assert.True(window.TabContextMenu!.IsOpen);
+        // 菜单真的显示出来了：菜单项有模板、有大小
+        var close = window.TabContextMenu.Items.OfType<Avalonia.Controls.MenuItem>().First();
+        Assert.Equal("关闭", close.Header);
+        Assert.True(close.IsEffectivelyVisible);
+        Assert.NotNull(close.Template);
+        Assert.True(close.Bounds.Height > 10);
     }
 }
