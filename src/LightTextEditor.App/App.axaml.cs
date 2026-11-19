@@ -25,6 +25,7 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         TextEncoding.EnsureCodePagesRegistered();
+        CaptionButtonToolTips.Register();
         Settings = JsonStore.LoadSettings();
         ApplyTheme(Settings.Theme);
 

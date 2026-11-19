@@ -26,5 +26,12 @@ internal static class Program
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            // 调试用：在 Linux 上也让 Avalonia 自己绘制标题栏按钮，以便复现 Windows 上的外观
+#pragma warning disable AVALONIA_X11_FORCE_CSD
+            .With(new X11PlatformOptions
+            {
+                ForceDrawnDecorations = Environment.GetEnvironmentVariable("LTE_FORCE_DRAWN_DECORATIONS") == "1",
+            })
+#pragma warning restore AVALONIA_X11_FORCE_CSD
             .LogToTrace();
 }

@@ -428,6 +428,29 @@ public partial class MainWindow : Window
 
     // ───────────────────────── 外观 ─────────────────────────
 
+    private const double CaptionButtonWidth = 46;
+
+    /// <summary>在标题栏按钮下方显示提示（按钮从右到左依次为 关闭、最大化、最小化）。</summary>
+    internal void ShowCaptionToolTip(WindowDecorationsElementRole role, string text)
+    {
+        int indexFromRight = role switch
+        {
+            WindowDecorationsElementRole.CloseButton => 0,
+            WindowDecorationsElementRole.MaximizeButton => 1,
+            _ => 2,
+        };
+        CaptionToolTipText.Text = text;
+        CaptionToolTip.IsVisible = true;
+        CaptionToolTip.Measure(Size.Infinity);
+        double width = CaptionToolTip.DesiredSize.Width;
+        double buttonCenter = Bounds.Width - CaptionButtonWidth * (indexFromRight + 0.5);
+        double left = Math.Clamp(buttonCenter - width / 2, 4, Math.Max(4, Bounds.Width - width - 4));
+        Canvas.SetLeft(CaptionToolTip, left);
+        Canvas.SetTop(CaptionToolTip, ExtendClientAreaTitleBarHeightHint + 6);
+    }
+
+    internal void HideCaptionToolTip() => CaptionToolTip.IsVisible = false;
+
     /// <summary>Windows 11 上使用 Mica 背景；不支持时使用纯色背景。</summary>
     private void UpdateBackdrop()
     {
@@ -514,10 +537,7 @@ public partial class MainWindow : Window
     {
         foreach (var tab in AllTabs().Where(t => t.Doc.IsDirty).ToList())
         {
-            Select(tab);
-            var choice = await Dialogs.ConfirmSaveAsync(this, tab.Doc.Title);
-            if (choice == SaveChoice.Cancel) return;
-            if (choice == SaveChoice.Save && !await SaveAsync(tab)) return;
+            if (await AskToSaveBeforeClosingAsync(tab) == SaveChoice.Cancel) return;
         }
         _closeConfirmed = true;
         Close();

@@ -18,8 +18,12 @@ internal sealed partial class SettingsJsonContext : JsonSerializerContext;
 /// <summary>读写 JSON 配置文件。文件损坏时返回默认值，不让程序崩溃。</summary>
 public static class JsonStore
 {
-    public static AppSettings LoadSettings(string? path = null) =>
-        Load(path ?? AppPaths.SettingsFile, SettingsJsonContext.Default.AppSettings) ?? new AppSettings();
+    public static AppSettings LoadSettings(string? path = null)
+    {
+        var settings = Load(path ?? AppPaths.SettingsFile, SettingsJsonContext.Default.AppSettings) ?? new AppSettings();
+        settings.Migrate();
+        return settings;
+    }
 
     public static void SaveSettings(AppSettings settings, string? path = null) =>
         Save(path ?? AppPaths.SettingsFile, settings, SettingsJsonContext.Default.AppSettings);

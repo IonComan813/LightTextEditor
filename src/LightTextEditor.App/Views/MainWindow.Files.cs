@@ -151,44 +151,85 @@ public partial class MainWindow
         _active is null ? Task.FromResult(false) : SaveAsync(_active, saveAs);
 
     /// <summary>
-    /// 保存文档。未命名文档直接存入笔记库（文件名取首行），不弹出选择位置的对话框。
+    /// 保存文档。未命名文档会弹出对话框确认文件名和后缀，保存到笔记库（不询问位置）。
     /// </summary>
     private async Task<bool> SaveAsync(DocumentTab tab, bool saveAs = false)
     {
         var doc = tab.Doc;
-        string path;
-        TextEncoding encoding = doc.Encoding;
-        bool savedToLibrary = false;
 
         if (saveAs)
         {
             var picked = await PickSavePathAsync(doc);
             if (picked is null) return false;
-            path = picked;
-            if (doc.IsUntitled)
-                encoding = TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path)));
-        }
-        else if (doc.FilePath is null)
-        {
-            Directory.CreateDirectory(LibraryPath);
-            var baseName = FileNaming.SuggestBaseName(doc.Document.Text, DateTime.Now);
-            path = FileNaming.MakeUniquePath(LibraryPath, baseName, doc.NewFileExtension);
-            savedToLibrary = true;
-        }
-        else
-        {
-            path = doc.FilePath;
-            // 磁盘上的文件在打开后被别的程序改过：确认是否覆盖
-            var diskTime = DocumentViewModel.TryGetWriteTime(path);
-            if (diskTime is not null && doc.KnownWriteTimeUtc is not null && diskTime != doc.KnownWriteTimeUtc &&
-                !await Dialogs.ConfirmAsync(this, "文件已在外部被修改",
-                    $"“{doc.Title}”在打开后被其他程序修改过。保存将覆盖那些修改。", "覆盖保存"))
-                return false;
+            var encoding = doc.IsUntitled
+                ? TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(picked)))
+                : doc.Encoding;
+            return await WriteAsync(doc, picked, encoding);
         }
 
+        if (doc.FilePath is null)
+        {
+            var result = await PromptUntitledFileNameAsync(doc, askDontSave: false);
+            return result.Choice == SaveChoice.Save && await SaveUntitledAsync(doc, result.FileName!);
+        }
+
+        // 磁盘上的文件在打开后被别的程序改过：确认是否覆盖
+        var diskTime = DocumentViewModel.TryGetWriteTime(doc.FilePath);
+        if (diskTime is not null && doc.KnownWriteTimeUtc is not null && diskTime != doc.KnownWriteTimeUtc &&
+            !await Dialogs.ConfirmAsync(this, "文件已在外部被修改",
+                $"“{doc.Title}”在打开后被其他程序修改过。保存将覆盖那些修改。", "覆盖保存"))
+            return false;
+
+        return await WriteAsync(doc, doc.FilePath, doc.Encoding);
+    }
+
+    /// <summary>
+    /// 未命名文档的文件名对话框。默认文件名取首行文字（没有则用时间），后缀为默认后缀，都可以修改。
+    /// <paramref name="askDontSave"/> 为真时（关闭标签页 / 窗口时）多一个“不保存”按钮。
+    /// </summary>
+    private Task<FileNamePromptResult> PromptUntitledFileNameAsync(DocumentViewModel doc, bool askDontSave)
+    {
+        var library = LibraryPath;
+        return Dialogs.PromptFileNameAsync(this, new FileNamePrompt(
+            Title: askDontSave ? "保存更改" : "保存到笔记库",
+            BaseName: FileNaming.SuggestBaseName(doc.Document.Text, DateTime.Now),
+            Extension: doc.NewFileExtension,
+            PrimaryText: "保存",
+            Validate: name => ValidateNewFileName(library, name))
+        {
+            Message = askDontSave ? $"是否将“{doc.Title}”保存到笔记库？" : null,
+            Location = library,
+            SecondaryText = askDontSave ? "不保存" : null,
+        });
+    }
+
+    private static string? ValidateNewFileName(string directory, string fileName)
+    {
+        if (FileNaming.ValidateUserFileName(fileName) is { } error) return error;
+        var target = Path.Combine(directory, fileName);
+        if (File.Exists(target) || Directory.Exists(target)) return "笔记库中已有同名文件。";
+        return null;
+    }
+
+    private async Task<bool> SaveUntitledAsync(DocumentViewModel doc, string fileName)
+    {
+        Directory.CreateDirectory(LibraryPath);
+        var path = Path.Combine(LibraryPath, fileName);
+        if (File.Exists(path))
+        {
+            await Dialogs.ShowErrorAsync(this, "无法保存", $"已存在同名文件：{fileName}");
+            return false;
+        }
+        return await WriteAsync(doc, path, TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path))));
+    }
+
+    /// <summary>写入磁盘并处理错误（编码无法表示的字符、权限、磁盘错误）。</summary>
+    private async Task<bool> WriteAsync(DocumentViewModel doc, string path, TextEncoding encoding)
+    {
         try
         {
             doc.SaveTo(path, encoding);
+            return true;
         }
         catch (EncodingLossException ex)
         {
@@ -196,29 +237,11 @@ public partial class MainWindow
                     $"{ex.TargetEncoding.DisplayName} 编码无法保存字符“{ex.Character}”。\n\n" +
                     "改用 UTF-8 保存可以保留所有字符（推荐）。", "改用 UTF-8 保存"))
                 return false;
-            return await TrySaveAsync(doc, path, TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path))));
+            return await WriteAsync(doc, path, TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path))));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             await Dialogs.ShowErrorAsync(this, "保存失败", $"{path}\n\n{e.Message}\n\n可以尝试“另存为”到其他位置。");
-            return false;
-        }
-
-        if (savedToLibrary)
-            ShowTransientNotice(doc, new DocumentNotice("已保存到笔记库", path, NoticeSeverity.Success, []));
-        return true;
-    }
-
-    private async Task<bool> TrySaveAsync(DocumentViewModel doc, string path, TextEncoding encoding)
-    {
-        try
-        {
-            doc.SaveTo(path, encoding);
-            return true;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or EncodingLossException)
-        {
-            await Dialogs.ShowErrorAsync(this, "保存失败", $"{path}\n\n{e.Message}");
             return false;
         }
     }
@@ -240,8 +263,8 @@ public partial class MainWindow
             FileTypeChoices =
             [
                 new FilePickerFileType("所有文件") { Patterns = ["*"] },
-                new FilePickerFileType("Markdown") { Patterns = ["*.md"] },
                 new FilePickerFileType("文本文档") { Patterns = ["*.txt"] },
+                new FilePickerFileType("Markdown") { Patterns = ["*.md"] },
             ],
         });
         return file?.TryGetLocalPath();
@@ -251,76 +274,130 @@ public partial class MainWindow
     {
         foreach (var tab in AllTabs().Where(t => t.Doc.IsDirty).ToList())
         {
+            Select(tab);
             if (!await SaveAsync(tab)) return;
         }
     }
 
-    // ───────────────────────── 重命名 ─────────────────────────
+    // ───────────────────────── 重命名 / 更改后缀 ─────────────────────────
 
     private async Task RenameAsync(DocumentTab tab)
     {
         var doc = tab.Doc;
-        string currentName = doc.FilePath is { } fp
-            ? Path.GetFileName(fp)
-            : FileNaming.SuggestBaseName(doc.Document.Text, DateTime.Now) + doc.NewFileExtension;
-        string dir = doc.FilePath is { } p ? Path.GetDirectoryName(p)! : LibraryPath;
-
-        string? Validate(string name)
-        {
-            name = name.Trim();
-            if (FileNaming.ValidateUserFileName(name) is { } error) return error;
-            var target = Path.Combine(dir, name);
-            bool sameFile = doc.FilePath is not null && string.Equals(target, doc.FilePath, StringComparison.OrdinalIgnoreCase);
-            if (!sameFile && (File.Exists(target) || Directory.Exists(target))) return "已存在同名文件。";
-            return null;
-        }
-
-        var newName = await Dialogs.PromptAsync(this, doc.IsUntitled ? "保存到笔记库" : "重命名",
-            "文件名", currentName, Validate, Path.GetFileNameWithoutExtension(currentName).Length);
-        if (newName is null) return;
-        newName = newName.Trim();
-
         if (doc.FilePath is null)
         {
-            // 未命名文档：按输入的名字保存到笔记库；没写扩展名时补上默认扩展名
-            if (Path.GetExtension(newName).Length == 0) newName += doc.NewFileExtension;
-            var target = Path.Combine(dir, newName);
-            if (File.Exists(target))
-            {
-                await Dialogs.ShowErrorAsync(this, "无法保存", $"已存在同名文件：{newName}");
-                return;
-            }
-            Directory.CreateDirectory(dir);
-            await TrySaveAsync(doc, target, TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(target))));
+            // 未命名文档：重命名 = 用这个名字保存到笔记库
+            var result = await PromptUntitledFileNameAsync(doc, askDontSave: false);
+            if (result.Choice == SaveChoice.Save) await SaveUntitledAsync(doc, result.FileName!);
             return;
         }
 
-        var newPath = Path.Combine(dir, newName);
+        var oldPath = doc.FilePath;
+        var dir = Path.GetDirectoryName(oldPath)!;
+        var prompt = await Dialogs.PromptFileNameAsync(this, new FileNamePrompt(
+            Title: "重命名",
+            BaseName: Path.GetFileNameWithoutExtension(oldPath),
+            Extension: Path.GetExtension(oldPath),
+            PrimaryText: "重命名",
+            Validate: name => ValidateRename(oldPath, name))
+        {
+            Location = dir,
+        });
+        if (prompt.Choice != SaveChoice.Save) return;
+        await MoveFileAsync(tab, Path.Combine(dir, prompt.FileName!));
+    }
 
-        if (newPath == doc.FilePath) return;
+    private static string? ValidateRename(string oldPath, string newName)
+    {
+        if (FileNaming.ValidateUserFileName(newName) is { } error) return error;
+        var target = Path.Combine(Path.GetDirectoryName(oldPath)!, newName);
+        bool sameFile = string.Equals(target, oldPath, StringComparison.OrdinalIgnoreCase);
+        if (!sameFile && (File.Exists(target) || Directory.Exists(target))) return "已存在同名文件。";
+        return null;
+    }
+
+    /// <summary>
+    /// 更改后缀（“转换”为其他类型的文件）。已保存的文件会在磁盘上重命名；
+    /// UTF-8 文件的 BOM 按规则调整（.txt/.md 带 BOM，代码文件不带）。
+    /// </summary>
+    internal async Task ChangeExtensionAsync(DocumentTab tab, string extension)
+    {
+        var doc = tab.Doc;
+        extension = FileTypes.NormalizeExtension(extension);
+
+        if (doc.FilePath is null)
+        {
+            doc.NewFileExtension = extension;
+            if (doc.Encoding.CodePage == 65001)
+                doc.Encoding = TextEncoding.Utf8(Settings.ShouldWriteBom(extension));
+            return;
+        }
+
+        var oldPath = doc.FilePath;
+        var newPath = Path.Combine(Path.GetDirectoryName(oldPath)!, Path.GetFileNameWithoutExtension(oldPath) + extension);
+        if (string.Equals(newPath, oldPath, StringComparison.Ordinal)) return;
+        if (ValidateRename(oldPath, Path.GetFileName(newPath)) is { } error)
+        {
+            await Dialogs.ShowErrorAsync(this, "无法更改后缀", error);
+            return;
+        }
+        if (!await MoveFileAsync(tab, newPath)) return;
+
+        bool wantBom = Settings.ShouldWriteBom(extension);
+        if (doc.Encoding.CodePage == 65001 && doc.Encoding.HasBom != wantBom)
+        {
+            bool wasDirty = doc.IsDirty;
+            doc.ChangeEncoding(TextEncoding.Utf8(wantBom));
+            // 文件没有其他未保存的修改时，立即写回，保证磁盘上的 BOM 与新类型一致
+            if (!wasDirty) await WriteAsync(doc, newPath, doc.Encoding);
+        }
+    }
+
+    private async Task<bool> MoveFileAsync(DocumentTab tab, string newPath)
+    {
+        var doc = tab.Doc;
+        if (doc.FilePath is null || newPath == doc.FilePath) return true;
         try
         {
             File.Move(doc.FilePath, newPath);
             doc.UpdatePath(newPath);
+            return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             await Dialogs.ShowErrorAsync(this, "重命名失败", e.Message);
+            return false;
         }
     }
 
     // ───────────────────────── 关闭 ─────────────────────────
 
+    /// <summary>
+    /// 关闭前询问是否保存。返回 Save（已保存）、DontSave 或 Cancel（取消或保存失败）。
+    /// 未命名文档直接显示带文件名的对话框（保存 / 不保存 / 取消）。
+    /// </summary>
+    private async Task<SaveChoice> AskToSaveBeforeClosingAsync(DocumentTab tab)
+    {
+        var doc = tab.Doc;
+        if (!doc.IsDirty) return SaveChoice.DontSave;
+        Select(tab);
+
+        if (doc.FilePath is null)
+        {
+            var result = await PromptUntitledFileNameAsync(doc, askDontSave: true);
+            if (result.Choice != SaveChoice.Save) return result.Choice;
+            return await SaveUntitledAsync(doc, result.FileName!) ? SaveChoice.Save : SaveChoice.Cancel;
+        }
+
+        var choice = await Dialogs.ConfirmSaveAsync(this, doc.Title);
+        if (choice != SaveChoice.Save) return choice;
+        return await SaveAsync(tab) ? SaveChoice.Save : SaveChoice.Cancel;
+    }
+
     internal async Task<bool> CloseTabAsync(DocumentTab tab)
     {
         if (Dialogs.IsOpen) return false;
-        if (tab.Doc.IsDirty)
-        {
-            Select(tab);
-            var choice = await Dialogs.ConfirmSaveAsync(this, tab.Doc.Title);
-            if (choice == SaveChoice.Cancel) return false;
-            if (choice == SaveChoice.Save && !await SaveAsync(tab)) return false;
-        }
+        if (await AskToSaveBeforeClosingAsync(tab) == SaveChoice.Cancel) return false;
         RemoveTab(tab);
         return true;
     }

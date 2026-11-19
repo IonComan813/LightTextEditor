@@ -40,7 +40,9 @@ public sealed partial class DocumentViewModel : ObservableObject
     public DateTime? KnownWriteTimeUtc { get; set; }
 
     /// <summary>新建文档使用的扩展名（文件保存前有效）。</summary>
-    public string NewFileExtension { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Extension))]
+    private string _newFileExtension;
 
     public bool IsUntitled => FilePath is null;
 
@@ -62,7 +64,7 @@ public sealed partial class DocumentViewModel : ObservableObject
         _filePath = filePath;
         _encoding = encoding;
         _lineEnding = lineEnding;
-        NewFileExtension = newFileExtension;
+        _newFileExtension = newFileExtension;
 
         Document.UndoStack.PropertyChanged += OnUndoStackPropertyChanged;
         Document.TextChanged += (_, _) => { if (IsUntitled) UpdateTitle(); };

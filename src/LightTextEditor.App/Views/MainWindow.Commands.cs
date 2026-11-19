@@ -235,6 +235,67 @@ public partial class MainWindow
         flyout.ShowAt(anchor);
     }
 
+    // ───────────────────────── 文件类型（后缀） ─────────────────────────
+
+    /// <summary>“更改后缀”菜单项：常用类型 + 其他后缀。</summary>
+    private List<Control> BuildExtensionMenuItems(DocumentTab tab)
+    {
+        var current = tab.Doc.Extension;
+        var items = new List<Control>();
+
+        MenuItem Item(LightTextEditor.Core.Library.FileTypes.FileType t)
+        {
+            var item = new MenuItem
+            {
+                Header = t.Label,
+                ToggleType = MenuItemToggleType.Radio,
+                IsChecked = string.Equals(t.Extension, current, StringComparison.OrdinalIgnoreCase),
+            };
+            item.Click += (_, _) => _ = ChangeExtensionAsync(tab, t.Extension);
+            return item;
+        }
+
+        var common = LightTextEditor.Core.Library.FileTypes.Common;
+        // 前两项（纯文本、Markdown）直接列出，其余放进“代码 / 数据”子菜单
+        items.Add(Item(common[0]));
+        items.Add(Item(common[1]));
+        var more = new MenuItem { Header = "代码 / 数据文件" };
+        foreach (var t in common.Skip(2)) more.Items.Add(Item(t));
+        items.Add(more);
+        items.Add(new Separator());
+
+        var other = new MenuItem { Header = "其他后缀…" };
+        other.Click += async (_, _) =>
+        {
+            var input = await Dialogs.PromptTextAsync(this, "更改后缀", "新的后缀（例如 .toml）", current,
+                text =>
+                {
+                    var ext = LightTextEditor.Core.Library.FileTypes.NormalizeExtension(text);
+                    if (ext.Length == 0) return "请输入后缀。";
+                    return LightTextEditor.Core.Library.FileNaming.ValidateUserFileName("a" + ext) is null
+                        ? null : "后缀中包含不允许的字符。";
+                });
+            if (input is not null) await ChangeExtensionAsync(tab, input);
+        };
+        items.Add(other);
+        return items;
+    }
+
+    private void OnFileTypeButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is null || sender is not Control anchor) return;
+        var flyout = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+        foreach (var item in BuildExtensionMenuItems(_active)) flyout.Items.Add(item);
+        flyout.ShowAt(anchor);
+    }
+
+    private void OnChangeExtensionMenuOpened(object? sender, RoutedEventArgs e)
+    {
+        if (_active is null || e.Source != ChangeExtensionMenu) return;
+        ChangeExtensionMenu.Items.Clear();
+        foreach (var item in BuildExtensionMenuItems(_active)) ChangeExtensionMenu.Items.Add(item);
+    }
+
     private void OnLineEndingButtonClick(object? sender, RoutedEventArgs e)
     {
         if (_active is null || sender is not Control anchor) return;

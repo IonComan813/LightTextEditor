@@ -43,7 +43,7 @@ public class MainWindowTests
         Assert.True(tab.Doc.IsUntitled);
         Assert.False(tab.Doc.IsDirty);
         Assert.Equal("无标题", tab.Doc.Title);
-        Assert.False(tab.CloseButton.Classes.Contains("dirty"));
+        Assert.DoesNotContain("dirty", tab.CloseButton.Classes);
     }
 
     [AvaloniaFact]
@@ -54,7 +54,7 @@ public class MainWindowTests
         var tab = window.ActiveTab!;
         Assert.True(tab.Doc.IsDirty);
         Assert.Equal("购物清单", tab.Doc.Title);
-        Assert.True(tab.CloseButton.Classes.Contains("dirty"));
+        Assert.Contains("dirty", tab.CloseButton.Classes);
         Assert.StartsWith("● 购物清单", window.Title);
     }
 
@@ -68,28 +68,117 @@ public class MainWindowTests
         Assert.False(window.ActiveTab.Doc.IsDirty);
     }
 
+    /// <summary>文件名对话框里的“文件名”输入框和“后缀”下拉框。</summary>
+    private static (TextBox Name, ComboBox Extension) FileNameFields(FluentAvalonia.UI.Controls.FAContentDialog dialog)
+    {
+        var panel = (StackPanel)dialog.Content!;
+        var row = panel.Children.OfType<Grid>().Single();
+        return ((TextBox)row.Children[0], (ComboBox)row.Children[1]);
+    }
+
     [AvaloniaFact]
-    public async Task CtrlS_OnUntitled_SavesIntoLibrary_WithoutDialog()
+    public async Task CtrlS_OnUntitled_AsksForFileName_DefaultsToFirstLineAndTxt()
     {
         var (window, library) = CreateWindow();
         Type(window, "# 会议记录\n内容");
-        Assert.True(await window.SaveActiveAsync());
+        var saving = window.SaveActiveAsync();
+
+        var dialog = FindDialog(window);
+        Assert.Equal("保存到笔记库", dialog.Title);
+        var (name, ext) = FileNameFields(dialog);
+        Assert.Equal("会议记录", name.Text);
+        Assert.Equal(".txt", ext.Text);
+        dialog.Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.Primary);
+        Assert.True(await saving);
 
         var tab = window.ActiveTab!;
-        var expected = Path.Combine(library, "会议记录.md");
+        var expected = Path.Combine(library, "会议记录.txt");
         Assert.Equal(expected, tab.Doc.FilePath);
         Assert.False(tab.Doc.IsDirty);
-        Assert.False(tab.CloseButton.Classes.Contains("dirty"));
-        Assert.Equal("会议记录.md", tab.Doc.Title);
+        Assert.DoesNotContain("dirty", tab.CloseButton.Classes);
+        Assert.Equal("会议记录.txt", tab.Doc.Title);
 
         var bytes = File.ReadAllBytes(expected);
-        Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, bytes[..3]); // .md 默认带 BOM
+        Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, bytes[..3]); // .txt 默认带 BOM
         Assert.Contains("会议记录", Encoding.UTF8.GetString(bytes));
 
-        // 再次保存写回同一个文件，不会生成新文件
+        // 再次保存直接写回同一个文件，不再弹窗
         Type(window, "!");
         Assert.True(await window.SaveActiveAsync());
         Assert.Single(Directory.GetFiles(library));
+    }
+
+    [AvaloniaFact]
+    public async Task SaveDialog_CanChangeNameAndExtension()
+    {
+        var (window, library) = CreateWindow();
+        Type(window, "print('hi')");
+        var saving = window.SaveActiveAsync();
+        var dialog = FindDialog(window);
+        var (name, ext) = FileNameFields(dialog);
+        name.Text = "hello";
+        ext.Text = "py"; // 不带点也可以
+        Dispatcher.UIThread.RunJobs();
+        dialog.Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.Primary);
+        Assert.True(await saving);
+
+        var path = Path.Combine(library, "hello.py");
+        Assert.Equal(path, window.ActiveTab!.Doc.FilePath);
+        Assert.Equal((byte)'p', File.ReadAllBytes(path)[0]); // 代码文件不带 BOM
+    }
+
+    [AvaloniaFact]
+    public async Task SaveDialog_RejectsExistingName()
+    {
+        var (window, library) = CreateWindow();
+        Directory.CreateDirectory(library);
+        File.WriteAllText(Path.Combine(library, "重复.txt"), "old");
+        Type(window, "重复");
+        var saving = window.SaveActiveAsync();
+        var dialog = FindDialog(window);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(dialog.IsPrimaryButtonEnabled);
+
+        FileNameFields(dialog).Name.Text = "不重复";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(dialog.IsPrimaryButtonEnabled);
+
+        dialog.Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.None); // 取消
+        Assert.False(await saving);
+        Assert.True(window.ActiveTab!.Doc.IsUntitled);
+        Assert.Equal("old", File.ReadAllText(Path.Combine(library, "重复.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task ChangeExtension_RenamesFile_AndAdjustsBom()
+    {
+        var (window, library) = CreateWindow();
+        Directory.CreateDirectory(library);
+        var path = Path.Combine(library, "script.txt");
+        File.WriteAllBytes(path, [0xEF, 0xBB, 0xBF, (byte)'x', (byte)'=', (byte)'1']);
+        await window.OpenFilesAsync([path]);
+
+        await window.ChangeExtensionAsync(window.ActiveTab!, ".py");
+        var newPath = Path.Combine(library, "script.py");
+        Assert.False(File.Exists(path));
+        Assert.Equal(newPath, window.ActiveTab!.Doc.FilePath);
+        Assert.Equal("x=1"u8.ToArray(), File.ReadAllBytes(newPath)); // BOM 已去掉
+        Assert.False(window.ActiveTab.Doc.IsDirty);
+        Assert.Equal("Python", window.FindControl<Button>("FileTypeButton")!.Content);
+    }
+
+    [AvaloniaFact]
+    public async Task ChangeExtension_OnUntitled_ChangesDefaultInSaveDialog()
+    {
+        var (window, _) = CreateWindow();
+        await window.ChangeExtensionAsync(window.ActiveTab!, "md");
+        Assert.Equal("Markdown", window.FindControl<Button>("FileTypeButton")!.Content);
+        Type(window, "x");
+        var saving = window.SaveActiveAsync();
+        var dialog = FindDialog(window);
+        Assert.Equal(".md", FileNameFields(dialog).Extension.Text);
+        dialog.Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.None);
+        await saving;
     }
 
     [AvaloniaFact]
@@ -228,12 +317,31 @@ public class MainWindowTests
         var closing = window.CloseTabAsync(window.ActiveTab!);
 
         var dialog = FindDialog(window);
-        Assert.Equal("是否将更改保存到“未保存”？", dialog.Content);
+        Assert.Equal("保存更改", dialog.Title);
+        Assert.Equal("不保存", dialog.SecondaryButtonText);
+        Assert.Equal("未保存", FileNameFields(dialog).Name.Text);
         dialog.Hide(answer);
         await closing;
 
         Assert.Equal(remainingTabs, window.AllTabs().Count);
         Assert.False(Directory.Exists(library) && Directory.GetFiles(library).Length > 0);
+    }
+
+    [AvaloniaFact]
+    public async Task ClosingDirtySavedFile_UsesSimpleSavePrompt()
+    {
+        var (window, library) = CreateWindow();
+        Directory.CreateDirectory(library);
+        var path = Path.Combine(library, "已有.txt");
+        File.WriteAllText(path, "a");
+        await window.OpenFilesAsync([path]);
+        Type(window, "b");
+        var closing = window.CloseTabAsync(window.ActiveTab!);
+        var dialog = FindDialog(window);
+        Assert.Equal("是否将更改保存到“已有.txt”？", dialog.Content);
+        dialog.Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.Primary);
+        Assert.True(await closing);
+        Assert.Equal("ba", File.ReadAllText(path));
     }
 
     [AvaloniaFact]
@@ -246,7 +354,7 @@ public class MainWindowTests
         FindDialog(window).Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.Primary);
         Assert.True(await closing);
         Assert.Single(window.AllTabs());
-        Assert.True(File.Exists(Path.Combine(library, "要保存的.md")));
+        Assert.True(File.Exists(Path.Combine(library, "要保存的.txt")));
     }
 
     [AvaloniaFact]

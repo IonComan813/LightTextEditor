@@ -4,11 +4,16 @@ namespace LightTextEditor.Core.Settings;
 
 public sealed class AppSettings
 {
+    /// <summary>设置文件的格式版本，用于升级旧设置。</summary>
+    public const int CurrentVersion = 1;
+
+    public int Version { get; set; }
+
     /// <summary>笔记库目录；为空时使用 <see cref="AppPaths.DefaultLibraryDirectory"/>。</summary>
     public string? LibraryPath { get; set; }
 
     /// <summary>新建文件的默认扩展名。</summary>
-    public string DefaultExtension { get; set; } = ".md";
+    public string DefaultExtension { get; set; } = ".txt";
 
     /// <summary>新建的 .txt / .md 文件是否写入 UTF-8 BOM（作为编码声明）。代码文件始终不带 BOM。</summary>
     public bool Utf8BomForPlainText { get; set; } = true;
@@ -33,6 +38,17 @@ public sealed class AppSettings
     public string Theme { get; set; } = "System";
 
     public WindowPlacement? Window { get; set; }
+
+    /// <summary>把旧版本的设置升级到当前版本。</summary>
+    public void Migrate()
+    {
+        if (Version < 1)
+        {
+            // v1：新建文件默认保存为 .txt（之前是 .md）
+            DefaultExtension = ".txt";
+        }
+        Version = CurrentVersion;
+    }
 
     public string ResolveLibraryPath() =>
         string.IsNullOrWhiteSpace(LibraryPath) ? AppPaths.DefaultLibraryDirectory : LibraryPath!;

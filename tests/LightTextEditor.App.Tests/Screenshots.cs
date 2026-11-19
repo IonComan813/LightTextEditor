@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LightTextEditor.App.Views;
 using LightTextEditor.Core.Settings;
 
@@ -27,7 +28,7 @@ public class Screenshots
         Directory.CreateDirectory(library);
         App.Settings = new AppSettings { LibraryPath = library, RestoreSession = false };
 
-        var saved = Path.Combine(library, "读书笔记.md");
+        var saved = Path.Combine(library, "读书笔记.txt");
         File.WriteAllText(saved, "# 读书笔记\n\n## 第一章\n\n这是一段已经保存的内容。\nThe quick brown fox jumps over the lazy dog.\n");
 
         var window = new MainWindow { Width = 1000, Height = 560 };
@@ -50,6 +51,18 @@ public class Screenshots
         window.KeyPress(Key.Tab, RawInputModifiers.Control, PhysicalKey.Tab, null);
         Dispatcher.UIThread.RunJobs();
         window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"saved-tab-{theme}.png"));
+
+        // 未命名文档第一次保存时的对话框
+        window.KeyPress(Key.Tab, RawInputModifiers.Control, PhysicalKey.Tab, null);
+        Dispatcher.UIThread.RunJobs();
+        var saving = window.SaveActiveAsync();
+        Dispatcher.UIThread.RunJobs();
+        await Task.Delay(400);
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"save-dialog-{theme}.png"));
+        window.GetVisualDescendants().OfType<FluentAvalonia.UI.Controls.FAContentDialog>().Single()
+            .Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.None);
+        await saving;
 
         // 不关闭窗口：有未保存的标签页时 Close() 会弹出确认对话框
     }

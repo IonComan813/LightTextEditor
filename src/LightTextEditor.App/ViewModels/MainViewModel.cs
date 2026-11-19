@@ -7,7 +7,7 @@ namespace LightTextEditor.App.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(EncodingText), nameof(LineEndingText))]
+    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(EncodingText), nameof(LineEndingText), nameof(FileTypeText))]
     private DocumentViewModel? _activeDocument;
 
     [ObservableProperty] private int _caretLine = 1;
@@ -41,6 +41,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public string LineEndingText => ActiveDocument?.LineEnding.DisplayName() ?? "";
 
+    public string FileTypeText => ActiveDocument is null ? "" : LightTextEditor.Core.Library.FileTypes.DisplayName(ActiveDocument.Extension);
+
     partial void OnCaretLineChanged(int value) => OnPropertyChanged(nameof(PositionText));
     partial void OnCaretColumnChanged(int value) => OnPropertyChanged(nameof(PositionText));
     partial void OnSelectionLengthChanged(int value) => OnPropertyChanged(nameof(PositionText));
@@ -65,6 +67,9 @@ public sealed partial class MainViewModel : ObservableObject
                 break;
             case nameof(DocumentViewModel.LineEnding):
                 OnPropertyChanged(nameof(LineEndingText));
+                break;
+            case nameof(DocumentViewModel.Extension):
+                OnPropertyChanged(nameof(FileTypeText));
                 break;
         }
     }
