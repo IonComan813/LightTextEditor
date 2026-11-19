@@ -233,6 +233,11 @@
     <Setter Property="Background" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
   </Style>
 
+  <!-- 灰色但仍可选择的菜单项（如“换一个编码”里已经试过的编码） -->
+  <Style Selector="MenuItem.dimmed">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+  </Style>
+
   <!-- 菜单栏紧凑一些 -->
   <Style Selector="Menu.mainMenu > MenuItem">
     <Setter Property="Padding" Value="10,4" />

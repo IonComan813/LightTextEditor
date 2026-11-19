@@ -49,7 +49,7 @@ public class EncodingTests
     private const string LongGbk = "这是一个用于测试编码检测的简体中文段落。它包含常用的汉字、标点符号，以及数字和英文。";
 
     [AvaloniaFact]
-    public async Task UncertainEncoding_ShowsConfirmationBar_WithThreeActions()
+    public async Task UncertainEncoding_ShowsConfirmationBar_WithCheckmarkAndChoices()
     {
         var (window, library) = CreateWindow();
         var path = WriteFile(library, "short.txt", Encoding.GetEncoding(936).GetBytes("你好世界"));
@@ -58,23 +58,29 @@ public class EncodingTests
         var doc = window.ActiveTab!.Doc;
         Assert.Equal("请确认编码", doc.Notice?.Title);
         Assert.Contains("GB18030（简体中文）", doc.Notice!.Message);
-        Assert.Equal(["显示正常", "换一个编码", "转换为 UTF-8"], doc.Notice.Actions.Select(a => a.Label));
+        Assert.Equal(["显示正常", "换一个编码"], doc.Notice.Actions.Select(a => a.Label));
+        Assert.Equal(NoticeIcon.Checkmark, Action(doc, "显示正常").Icon);
 
         var choices = Action(doc, "换一个编码").Children!;
         Assert.Contains(choices, c => c.Label.StartsWith("Big5"));
         Assert.StartsWith("GB18030", Assert.Single(choices, c => c.IsChecked).Label);
+        Assert.StartsWith("GB18030", Assert.Single(choices, c => c.IsDimmed).Label); // 打开时用的编码算"试过"
 
-        // 提示条上的下拉按钮
+        // 提示条：✓ 按钮（只有图标，提示文字"显示正常"）+ 下拉按钮
         Dispatcher.UIThread.RunJobs();
         Assert.True(window.FindControl<Border>("NoticeHost")!.IsVisible);
         var bar = window.FindControl<FAInfoBar>("NoticeBar")!;
-        var dropDown = Assert.IsType<DropDownButton>(Assert.IsType<StackPanel>(bar.Content).Children[1]);
+        var buttons = Assert.IsType<StackPanel>(bar.Content).Children;
+        var check = Assert.IsType<Button>(buttons[0]);
+        Assert.IsType<FASymbolIcon>(check.Content);
+        Assert.Equal("显示正常", ToolTip.GetTip(check));
+        var dropDown = Assert.IsType<DropDownButton>(buttons[1]);
         Assert.Equal("换一个编码", dropDown.Content);
         Assert.Equal(ReopenCount, ((MenuFlyout)dropDown.Flyout!).Items.Count);
     }
 
     [AvaloniaFact]
-    public async Task ConfirmingEncoding_IsRemembered_ForNextOpen()
+    public async Task ConfirmingEncoding_IsRemembered_ThenOffersUtf8Conversion()
     {
         var (window, library) = CreateWindow();
         var path = WriteFile(library, "confirm.txt", Encoding.GetEncoding(936).GetBytes("中文"));
@@ -83,9 +89,14 @@ public class EncodingTests
         var tab = window.ActiveTab!;
         Action(tab.Doc, "显示正常").Execute();
         Assert.True(tab.Doc.Encoding.IsCertain);
-        Assert.Null(tab.Doc.Notice);
         Assert.False(tab.Doc.IsDirty); // 确认编码不改动文件
         Assert.Equal(54936, App.EncodingMemory.Get(path)?.CodePage);
+
+        // 点了 ✓ 之后再问是否转换为 UTF-8；选择保持则关闭提示条
+        Assert.Equal("编码已确认", tab.Doc.Notice?.Title);
+        Assert.Equal(["转换为 UTF-8", "保持 GB18030"], tab.Doc.Notice!.Actions.Select(a => a.Label));
+        Action(tab.Doc, "保持 GB18030").Execute();
+        Assert.Null(tab.Doc.Notice);
 
         Assert.True(await window.CloseTabAsync(tab));
         await window.OpenFilesAsync([path]);
@@ -96,7 +107,7 @@ public class EncodingTests
     }
 
     [AvaloniaFact]
-    public async Task ChoosingAnotherEncoding_Reopens_AndIsRemembered()
+    public async Task ChoosingAnotherEncoding_AsksAgain_DimsTriedOnes_AndRemembersAfterCheckmark()
     {
         var (window, library) = CreateWindow();
         // 太短，按结构推测会猜成 GB18030
@@ -105,14 +116,69 @@ public class EncodingTests
         await window.OpenFilesAsync([path]);
         var doc = window.ActiveTab!.Doc;
         Assert.NotEqual("中文", doc.Document.Text);
+        int guessed = doc.Encoding.CodePage;
 
+        // 先试 Shift-JIS，再试 Big5
+        Assert.Single(Action(doc, "换一个编码").Children!, c => c.Label.StartsWith("Shift-JIS")).Execute();
+        Dispatcher.UIThread.RunJobs();
         Assert.Single(Action(doc, "换一个编码").Children!, c => c.Label.StartsWith("Big5")).Execute();
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("中文", doc.Document.Text);
         Assert.Equal(950, doc.Encoding.CodePage);
+
+        // 换了编码后仍要点 ✓ 确认，确认前不记录
+        Assert.False(doc.Encoding.IsCertain);
+        Assert.Equal("请确认编码", doc.Notice?.Title);
+        Assert.StartsWith("已按 Big5（繁体中文） 重新打开", doc.Notice!.Message);
+        Assert.Null(App.EncodingMemory.Get(path));
+
+        // 打开时猜的编码和试过的两个都是灰色，但仍然可以选择
+        Assert.Equal([guessed, 950, 932], doc.TriedCodePages);
+        var dimmed = Action(doc, "换一个编码").Children!.Where(c => c.IsDimmed).Select(c => c.Label.Split('（')[0]).ToList();
+        Assert.Contains("Big5", dimmed);
+        Assert.Contains("Shift-JIS", dimmed);
+
+        Action(doc, "显示正常").Execute();
         Assert.True(doc.Encoding.IsCertain);
-        Assert.Null(doc.Notice);
         Assert.Equal(950, App.EncodingMemory.Get(path)?.CodePage);
+        Assert.Equal("编码已确认", doc.Notice?.Title);
+
+        // 接着转换为 UTF-8：编码已确认，不再弹对话框
+        Action(doc, "转换为 UTF-8").Execute();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal([0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes("中文")], File.ReadAllBytes(path));
+        Assert.Null(App.EncodingMemory.Get(path));
+    }
+
+    [AvaloniaFact]
+    public async Task TopMenu_AlwaysOffersEncodingChoicesAndConversion()
+    {
+        var (window, library) = CreateWindow();
+        var path = WriteFile(library, "menu.txt", Encoding.GetEncoding(936).GetBytes(LongGbk));
+        await window.OpenFilesAsync([path]);
+        var tab = window.ActiveTab!;
+        Assert.True(tab.Doc.Encoding.IsCertain); // 统计检测足够可靠：没有提示条，但菜单里照样可以换编码、转换
+        Assert.Null(tab.Doc.Notice);
+
+        var menu = window.FindControl<MenuItem>("EncodingMenu")!;
+        Assert.Equal("编码(_N)", menu.Header);
+        var items = window.BuildEncodingMenuItems(tab).OfType<MenuItem>().ToList();
+        var reopen = Assert.Single(items, i => (string?)i.Header == "以其他编码重新打开");
+        Assert.True(reopen.IsEnabled);
+        Assert.Equal(ReopenCount, reopen.Items.Count);
+        var gb = reopen.Items.OfType<MenuItem>().Single(i => ((string)i.Header!).StartsWith("GB18030"));
+        Assert.True(gb.IsChecked);
+        Assert.Contains("dimmed", gb.Classes);
+        Assert.True(gb.IsEnabled);
+        Assert.Contains(items, i => (string?)i.Header == "以其他编码保存");
+        Assert.True(Assert.Single(items, i => (string?)i.Header == "转换为 UTF-8").IsEnabled);
+
+        // UTF-8 文件：转换项仍在，只是不可用
+        var utf8 = WriteFile(library, "u.txt", Encoding.UTF8.GetBytes("中文"));
+        await window.OpenFilesAsync([utf8]);
+        var convert = Assert.Single(window.BuildEncodingMenuItems(window.ActiveTab!).OfType<MenuItem>(),
+            i => ((string)i.Header!).StartsWith("转换为 UTF-8"));
+        Assert.False(convert.IsEnabled);
     }
 
     [AvaloniaFact]
@@ -167,7 +233,7 @@ public class EncodingTests
         await window.OpenFilesAsync([path]);
         var tab = window.ActiveTab!;
         Assert.Equal("有无法识别的字节", tab.Doc.Notice?.Title);
-        Assert.DoesNotContain(tab.Doc.Notice!.Actions, a => a.Label == "转换为 UTF-8");
+        Assert.Equal(["换一个编码"], tab.Doc.Notice!.Actions.Select(a => a.Label));
 
         var save = window.SaveActiveAsync();
         var dialog = FindDialog(window)!;

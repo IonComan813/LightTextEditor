@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -92,11 +93,31 @@ public class Screenshots
         Dispatcher.UIThread.RunJobs();
         window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-notice-{theme}.png"));
 
-        // 展开"换一个编码"
+        // 试一个错误的编码（Windows-1252），再展开"换一个编码"：试过的显示为灰色
+        var doc = window.ActiveTab!.Doc;
+        doc.Notice!.Actions.Single(x => x.Label == "换一个编码").Children!.Single(c => c.Label.StartsWith("Windows-1252")).Execute();
+        Dispatcher.UIThread.RunJobs();
         var dropDown = window.GetVisualDescendants().OfType<Avalonia.Controls.DropDownButton>().First();
         dropDown.Flyout!.ShowAt(dropDown);
         Dispatcher.UIThread.RunJobs();
         window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-choices-{theme}.png"));
         dropDown.Flyout.Hide();
+
+        // 换回 Windows-1251，点 ✓：询问是否转换为 UTF-8
+        doc.Notice!.Actions.Single(x => x.Label == "换一个编码").Children!.Single(c => c.Label.StartsWith("Windows-1251")).Execute();
+        Dispatcher.UIThread.RunJobs();
+        doc.Notice!.Actions.Single(x => x.Label == "显示正常").Execute();
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-convert-offer-{theme}.png"));
+
+        // 顶部"编码"菜单
+        var menu = window.FindControl<Avalonia.Controls.MenuItem>("EncodingMenu")!;
+        menu.Open();
+        Dispatcher.UIThread.RunJobs();
+        var reopen = menu.Items.OfType<Avalonia.Controls.MenuItem>().Single(i => (string?)i.Header == "以其他编码重新打开");
+        reopen.Open();
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-menu-{theme}.png"));
+        menu.Close();
     }
 }

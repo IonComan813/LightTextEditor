@@ -22,6 +22,8 @@ public enum DetectionMethod
     CjkHeuristic,
     /// <summary>什么都判断不出来，按 GB18030 打开。</summary>
     Fallback,
+    /// <summary>用户指定的编码（"以其他编码重新打开"）。</summary>
+    Manual,
 }
 
 /// <summary>

@@ -32,6 +32,9 @@ public sealed partial class DocumentViewModel : ObservableObject
     /// <summary>文件中有无法按打开时的编码识别的字节（显示为 �），保存会改变它们。</summary>
     public bool HasUndecodableBytes => Detection is { IsLossless: false };
 
+    /// <summary>这次打开以来用过的编码（代码页），"换一个编码"菜单里把它们显示为灰色。</summary>
+    public HashSet<int> TriedCodePages { get; } = [];
+
     [ObservableProperty]
     private LineEnding _lineEnding;
 
@@ -86,6 +89,7 @@ public sealed partial class DocumentViewModel : ObservableObject
         var doc = new DocumentViewModel(loaded.Text, Path.GetFullPath(path), loaded.Encoding, loaded.LineEnding, Path.GetExtension(path));
         doc.KnownWriteTimeUtc = TryGetWriteTime(path);
         doc.Detection = loaded.Detection;
+        doc.TriedCodePages.Add(loaded.Encoding.CodePage);
         return doc;
     }
 
@@ -149,15 +153,16 @@ public sealed partial class DocumentViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 从磁盘重新读取。<paramref name="forcedEncoding"/> 不为空时按该编码解码（"以其他编码重新打开"），
-    /// 否则重新检测编码（<paramref name="remembered"/> 为编码记录中的编码）。
+    /// 从磁盘重新读取。<paramref name="forcedEncoding"/> 不为空时按该编码解码（"以其他编码重新打开"，
+    /// 结果为"待确认"），否则重新检测编码（<paramref name="remembered"/> 为编码记录中的编码）。
     /// </summary>
     public void Reload(TextEncoding? forcedEncoding = null, TextEncoding? remembered = null)
     {
         if (FilePath is null) return;
         var loaded = forcedEncoding is null
             ? TextFileIO.Load(FilePath, LineEnding, remembered)
-            : TextFileIO.DecodeAs(File.ReadAllBytes(FilePath), forcedEncoding, LineEnding);
+            : TextFileIO.DecodeAs(File.ReadAllBytes(FilePath), forcedEncoding, LineEnding, isCertain: false);
+        TriedCodePages.Add(loaded.Encoding.CodePage);
 
         // 用 Replace 而不是赋值 Text，保留撤销历史（可以撤销"重新加载"）。
         Document.Replace(0, Document.TextLength, loaded.Text);
@@ -197,10 +202,21 @@ public enum NoticeSeverity { Informational, Success, Warning, Error }
 /// <summary>编辑区上方的提示条。</summary>
 public sealed record DocumentNotice(string Title, string Message, NoticeSeverity Severity, IReadOnlyList<NoticeAction> Actions);
 
-/// <summary>提示条上的按钮。有 <see cref="Children"/> 时显示为下拉按钮（<see cref="Execute"/> 不使用）。</summary>
+public enum NoticeIcon { None, Checkmark }
+
+/// <summary>
+/// 提示条上的按钮。有 <see cref="Children"/> 时显示为下拉按钮（<see cref="Execute"/> 不使用）；
+/// 有 <see cref="Icon"/> 时只显示图标，<see cref="Label"/> 作为提示文字。
+/// </summary>
 public sealed record NoticeAction(string Label, Action Execute)
 {
     public IReadOnlyList<NoticeAction>? Children { get; init; }
 
+    public NoticeIcon Icon { get; init; }
+
+    /// <summary>作为下拉菜单项时：是否打勾（当前项）。</summary>
     public bool IsChecked { get; init; }
+
+    /// <summary>作为下拉菜单项时：文字显示为灰色（仍可选择），如已经试过的编码。</summary>
+    public bool IsDimmed { get; init; }
 }

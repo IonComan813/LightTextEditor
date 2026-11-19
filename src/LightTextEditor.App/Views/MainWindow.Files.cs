@@ -149,7 +149,8 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 编码"待确认"或有无法识别的字节时的提示条：[显示正常] [换一个编码▾] [转换为 UTF-8]。不需要提示时返回 null。
+    /// 编码"待确认"或有无法识别的字节时的提示条：[✓] [换一个编码▾]。点 ✓ 后再询问是否转换为 UTF-8
+    /// （见 <see cref="ConfirmEncoding"/>）。不需要提示时返回 null。
     /// </summary>
     private DocumentNotice? EncodingNotice(DocumentTab tab)
     {
@@ -163,33 +164,58 @@ public partial class MainWindow
             ? $"有部分字节无法按 {enc} 识别（显示为 �），按此编码保存会改变它们。可以换一个编码重新打开。"
             : detection?.Method switch
             {
+                DetectionMethod.Manual => $"已按 {enc} 重新打开，显示是否正常？",
                 DetectionMethod.Statistical when detection.ConfidenceText is { } c => $"检测为 {enc}（置信度 {c}），显示是否正常？",
                 DetectionMethod.CjkHeuristic => $"推测为 {enc}，显示是否正常？",
                 _ => $"无法判断编码，已按 {enc} 打开。显示是否正常？",
             } + (doc.HasUndecodableBytes ? "\n有部分字节无法按此编码识别（显示为 �）。" : "");
 
         var actions = new List<NoticeAction>();
-        if (uncertain && !doc.HasUndecodableBytes)
-            actions.Add(new NoticeAction("显示正常", () => ConfirmEncoding(doc)));
-        actions.Add(new NoticeAction("换一个编码", () => { })
-        {
-            Children = [.. ReopenEncodings.Select(e => new NoticeAction(e.Name, () => _ = ReopenWithEncodingAsync(doc, e.Create()))
-            {
-                IsChecked = e.Create().CodePage == doc.Encoding.CodePage,
-            })],
-        });
-        if (!doc.HasUndecodableBytes)
-            actions.Add(new NoticeAction("转换为 UTF-8", () => _ = ConvertToUtf8Async(tab)));
+        if (uncertain)
+            actions.Add(new NoticeAction("显示正常", () => ConfirmEncoding(doc)) { Icon = NoticeIcon.Checkmark });
+        actions.Add(new NoticeAction("换一个编码", () => { }) { Children = ReopenChoices(doc) });
 
         return new DocumentNotice(uncertain ? "请确认编码" : "有无法识别的字节", message, NoticeSeverity.Warning, actions);
     }
 
-    /// <summary>用户确认当前编码显示正常：记入编码记录，下次直接使用，不改动文件。</summary>
-    private static void ConfirmEncoding(DocumentViewModel doc)
+    /// <summary>"换一个编码"的选项：当前编码打勾，这次打开以来试过的显示为灰色（仍可选择）。</summary>
+    private IReadOnlyList<NoticeAction> ReopenChoices(DocumentViewModel doc) =>
+    [
+        .. ReopenEncodings.Select(e =>
+        {
+            int codePage = e.Create().CodePage;
+            return new NoticeAction(e.Name, () => _ = ReopenWithEncodingAsync(doc, e.Create()))
+            {
+                IsChecked = codePage == doc.Encoding.CodePage,
+                IsDimmed = doc.TriedCodePages.Contains(codePage),
+            };
+        }),
+    ];
+
+    /// <summary>
+    /// 用户确认当前编码显示正常：记入编码记录（下次直接使用，不改动文件），
+    /// 然后在提示条上询问是否转换为 UTF-8。
+    /// </summary>
+    private void ConfirmEncoding(DocumentViewModel doc)
     {
         doc.Encoding = doc.Encoding with { IsCertain = true };
         if (doc.FilePath is { } path) App.EncodingMemory.Remember(path, doc.Encoding);
-        doc.Notice = null;
+        doc.Notice = doc.FilePath is not null && !doc.Encoding.IsUtf8 && !doc.HasUndecodableBytes &&
+                     FindTabByDocument(doc) is { } tab
+            ? ConvertOffer(tab)
+            : null;
+    }
+
+    private DocumentNotice ConvertOffer(DocumentTab tab)
+    {
+        var doc = tab.Doc;
+        return new DocumentNotice("编码已确认",
+            $"以后打开这个文件会直接使用 {doc.Encoding.DisplayName}。要转换为 UTF-8 吗？转换后其他软件也能正确识别。",
+            NoticeSeverity.Informational,
+            [
+                new NoticeAction("转换为 UTF-8", () => _ = ConvertToUtf8Async(tab)),
+                new NoticeAction($"保持 {doc.Encoding.DisplayName}", () => doc.Notice = null),
+            ]);
     }
 
     // ───────────────────────── 保存 ─────────────────────────
@@ -622,9 +648,8 @@ public partial class MainWindow
             return;
         try
         {
+            // 重新打开后仍是"待确认"：用户在提示条上点 ✓ 后才记入编码记录
             doc.Reload(encoding);
-            // 用户明确选择的编码：记下来，下次打开直接使用
-            App.EncodingMemory.Remember(doc.FilePath, doc.Encoding);
             doc.Notice = FindTabByDocument(doc) is { } tab ? EncodingNotice(tab) : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -666,7 +691,10 @@ public partial class MainWindow
                 $"将按 {doc.Encoding.Description} 的解读把“{doc.Title}”转换为 UTF-8 并保存。\n\n" +
                 "请先确认内容显示正常：如果现在是乱码，转换后就无法再恢复原文。", "转换"))
             return false;
-        return await SaveWithEncodingAsync(tab, PreferredUtf8(path));
+        if (!await SaveWithEncodingAsync(tab, PreferredUtf8(path))) return false;
+        ShowTransientNotice(doc, new DocumentNotice("已转换为 UTF-8", $"“{doc.Title}”已保存为 {doc.Encoding.DisplayName}。",
+            NoticeSeverity.Success, []));
+        return true;
     }
 
     // ───────────────────────── 拖放 ─────────────────────────

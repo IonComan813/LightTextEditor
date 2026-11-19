@@ -39,13 +39,16 @@ public static class TextFileIO
         return Decode(bytes, detection, defaultLineEnding);
     }
 
-    /// <summary>按指定编码解码（"以其他编码重新打开"）。文件开头有该编码的 BOM 时跳过 BOM。</summary>
-    public static LoadedText DecodeAs(byte[] bytes, TextEncoding encoding, LineEnding defaultLineEnding = LineEnding.CrLf)
+    /// <summary>
+    /// 按指定编码解码（"以其他编码重新打开"）。文件开头有该编码的 BOM 时跳过 BOM。
+    /// 结果的 <see cref="TextEncoding.IsCertain"/> 由 <paramref name="isCertain"/> 决定（用户还在试编码时为 false）。
+    /// </summary>
+    public static LoadedText DecodeAs(byte[] bytes, TextEncoding encoding, LineEnding defaultLineEnding = LineEnding.CrLf, bool isCertain = true)
     {
         var bom = encoding.BomBytes;
         bool hasBom = bom.Length > 0 && bytes.AsSpan().StartsWith(bom);
-        var enc = encoding with { HasBom = hasBom, IsCertain = true };
-        return Decode(bytes, new EncodingDetection(enc, DetectionMethod.Remembered, 1, EncodingDetector.RoundTrips(bytes, enc)), defaultLineEnding);
+        var enc = encoding with { HasBom = hasBom, IsCertain = isCertain };
+        return Decode(bytes, new EncodingDetection(enc, DetectionMethod.Manual, 1, EncodingDetector.RoundTrips(bytes, enc)), defaultLineEnding);
     }
 
     private static LoadedText Decode(byte[] bytes, EncodingDetection detection, LineEnding defaultLineEnding)

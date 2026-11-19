@@ -245,24 +245,26 @@ public partial class MainWindow
 
     private static TextEncoding Legacy(int codePage) => new(Encoding.GetEncoding(codePage), false, true);
 
-    private void OnEncodingButtonClick(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// 编码菜单（顶部“编码”菜单和状态栏编码按钮共用）：确认当前编码、换一个编码重新打开（试过的显示为灰色）、
+    /// 以其他编码保存、转换为 UTF-8。
+    /// </summary>
+    internal List<Control> BuildEncodingMenuItems(DocumentTab tab)
     {
-        if (_active is null || sender is not Control anchor) return;
-        var tab = _active;
         var doc = tab.Doc;
+        var items = new List<Control>();
+
+        if (!doc.Encoding.IsCertain)
+        {
+            var confirm = new MenuItem { Header = $"确认 {doc.Encoding.DisplayName} 显示正常" };
+            confirm.Click += (_, _) => ConfirmEncoding(doc);
+            items.Add(confirm);
+            items.Add(new Separator());
+        }
 
         var reopen = new MenuItem { Header = "以其他编码重新打开", IsEnabled = doc.FilePath is not null };
-        foreach (var (name, create) in ReopenEncodings)
-        {
-            var item = new MenuItem
-            {
-                Header = name,
-                ToggleType = MenuItemToggleType.Radio,
-                IsChecked = create().CodePage == doc.Encoding.CodePage,
-            };
-            item.Click += (_, _) => _ = ReopenWithEncodingAsync(doc, create());
-            reopen.Items.Add(item);
-        }
+        foreach (var choice in ReopenChoices(doc)) reopen.Items.Add(ChoiceMenuItem(choice));
+        items.Add(reopen);
 
         var saveWith = new MenuItem { Header = "以其他编码保存" };
         foreach (var (name, create) in SaveEncodings)
@@ -271,25 +273,35 @@ public partial class MainWindow
             item.Click += (_, _) => _ = SaveWithEncodingAsync(tab, create());
             saveWith.Items.Add(item);
         }
+        items.Add(saveWith);
 
+        items.Add(new Separator());
+        var convert = new MenuItem
+        {
+            Header = doc.Encoding.IsUtf8 ? "转换为 UTF-8（已经是 UTF-8）" : "转换为 UTF-8",
+            IsEnabled = !doc.Encoding.IsUtf8,
+        };
+        convert.Click += (_, _) => _ = ConvertToUtf8Async(tab);
+        items.Add(convert);
+        return items;
+    }
+
+    private void OnEncodingButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is null || sender is not Control anchor) return;
         var flyout = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
-        if (!doc.Encoding.IsCertain)
-        {
-            var confirm = new MenuItem { Header = $"确认 {doc.Encoding.DisplayName} 显示正常" };
-            confirm.Click += (_, _) => ConfirmEncoding(doc);
-            flyout.Items.Add(confirm);
-            flyout.Items.Add(new Separator());
-        }
-        flyout.Items.Add(reopen);
-        flyout.Items.Add(saveWith);
-        if (!doc.Encoding.IsUtf8)
-        {
-            var convert = new MenuItem { Header = "转换为 UTF-8" };
-            convert.Click += (_, _) => _ = ConvertToUtf8Async(tab);
-            flyout.Items.Add(new Separator());
-            flyout.Items.Add(convert);
-        }
+        foreach (var item in BuildEncodingMenuItems(_active)) flyout.Items.Add(item);
         flyout.ShowAt(anchor);
+    }
+
+    /// <summary>顶部“编码”菜单：每次打开时按当前标签页重建。</summary>
+    private void OnEncodingMenuOpened(object? sender, RoutedEventArgs e)
+    {
+        if (_active is null || e.Source != EncodingMenu) return;
+        EncodingMenu.Items.Clear();
+        EncodingMenu.Items.Add(new MenuItem { Header = $"当前：{_vm.EncodingText}", IsEnabled = false });
+        EncodingMenu.Items.Add(new Separator());
+        foreach (var item in BuildEncodingMenuItems(_active)) EncodingMenu.Items.Add(item);
     }
 
     // ───────────────────────── 文件类型（后缀） ─────────────────────────

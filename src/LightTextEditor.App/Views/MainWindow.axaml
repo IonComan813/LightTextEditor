@@ -108,6 +108,9 @@
             <MenuItem Header="深色" Tag="Dark" ToggleType="Radio" GroupName="theme" x:Name="ThemeDarkItem" Click="OnThemeClick" />
           </MenuItem>
         </MenuItem>
+        <MenuItem Header="编码(_N)" x:Name="EncodingMenu" SubmenuOpened="OnEncodingMenuOpened">
+          <MenuItem Header="(占位)" />
+        </MenuItem>
         <MenuItem Header="帮助(_H)">
           <MenuItem Header="Markdown 示例(_M)" Click="OnOpenSampleClick"
                     ToolTip.Tip="打开笔记库里的 Markdown 示例（被删除时重新放一份）" />

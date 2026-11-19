@@ -999,21 +999,21 @@ public partial class MainWindow : Window
                 if (action.Children is { } children)
                 {
                     var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
-                    foreach (var child in children)
-                    {
-                        var item = new MenuItem
-                        {
-                            Header = child.Label,
-                            ToggleType = MenuItemToggleType.Radio,
-                            IsChecked = child.IsChecked,
-                        };
-                        item.Click += (_, _) => child.Execute();
-                        flyout.Items.Add(item);
-                    }
+                    foreach (var child in children) flyout.Items.Add(ChoiceMenuItem(child));
                     panel.Children.Add(new DropDownButton { Content = action.Label, Flyout = flyout });
                     continue;
                 }
-                var button = new Button { Content = action.Label };
+                var button = new Button
+                {
+                    Content = action.Icon == NoticeIcon.Checkmark
+                        ? new FASymbolIcon { Symbol = FASymbol.Checkmark, FontSize = 16 }
+                        : action.Label,
+                };
+                if (action.Icon != NoticeIcon.None)
+                {
+                    ToolTip.SetTip(button, action.Label);
+                    Avalonia.Automation.AutomationProperties.SetName(button, action.Label);
+                }
                 button.Click += (_, _) => action.Execute();
                 panel.Children.Add(button);
             }
@@ -1024,6 +1024,20 @@ public partial class MainWindow : Window
             NoticeBar.Content = null;
         }
         NoticeBar.IsOpen = true;
+    }
+
+    /// <summary>单选菜单项（当前项打勾）；<see cref="NoticeAction.IsDimmed"/> 时文字为灰色但仍可选择。</summary>
+    private static MenuItem ChoiceMenuItem(NoticeAction choice)
+    {
+        var item = new MenuItem
+        {
+            Header = choice.Label,
+            ToggleType = MenuItemToggleType.Radio,
+            IsChecked = choice.IsChecked,
+        };
+        if (choice.IsDimmed) item.Classes.Add("dimmed");
+        item.Click += (_, _) => choice.Execute();
+        return item;
     }
 
     /// <summary>显示一条几秒后自动消失的提示。</summary>
