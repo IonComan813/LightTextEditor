@@ -24,6 +24,8 @@ internal static class Fonts
     /// </summary>
     private static bool IsInstalled(string name)
     {
+        // 程序自带或资源中的字体（如 fonts:Inter#Inter、avares://…#名称）不在系统字体里，保留
+        if (name.Contains(':') || name.Contains('#')) return true;
         try
         {
             return FontManager.Current.SystemFonts.TryGetGlyphTypeface(name, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out _);
