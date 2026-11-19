@@ -57,9 +57,10 @@ public class LineNumberToggleTests
         static Avalonia.Controls.TextBlock Title(DocumentTab t) =>
             t.TabItem.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().First(tb => tb.Classes.Contains("tabTitle"));
 
-        Assert.Equal(Avalonia.Media.FontWeight.SemiBold, Title(second).FontWeight);
+        Assert.Equal(Avalonia.Media.FontWeight.Bold, Title(second).FontWeight);
         Assert.Equal(Avalonia.Media.FontWeight.Normal, Title(first).FontWeight);
-        Assert.NotEqual(Title(second).Foreground, Title(first).Foreground);
+        Assert.Equal(1, Title(second).Opacity);
+        Assert.True(Title(first).Opacity < 0.7);
 
         // 当前标签：× 可见；非当前但未保存：显示圆点
         Assert.Equal(1, second.CloseButton.Opacity);

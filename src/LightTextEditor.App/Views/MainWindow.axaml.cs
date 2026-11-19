@@ -13,13 +13,14 @@ using LightTextEditor.App.ViewModels;
 using LightTextEditor.Core.Settings;
 using LightTextEditor.Core.Text;
 using Avalonia.Controls.Chrome;
+using Avalonia.VisualTree;
 
 namespace LightTextEditor.App.Views;
 
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
-    private readonly System.Collections.ObjectModel.ObservableCollection<FATabViewItem> _tabItems = [];
+    private readonly System.Collections.ObjectModel.ObservableCollection<DocumentTab> _tabs = [];
     private DocumentTab? _active;
     internal DocumentTab? ActiveTab => _active;
     private bool _closeConfirmed;
@@ -47,7 +48,17 @@ public partial class MainWindow : Window
             TabStripFooterDragArea.MinWidth = 40;
         }
 
-        Tabs.TabItemsSource = _tabItems;
+        Tabs.TabItemsSource = _tabs;
+        Tabs.TabItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DocumentTab>(
+            (tab, _) => tab is null ? null! : new TabHeaderView(tab, CloseTabFromButton));
+        // 标签上的鼠标操作：中键关闭、双击重命名、右键菜单
+        Tabs.AddHandler(PointerReleasedEvent, OnTabMiddleClick, RoutingStrategies.Bubble, handledEventsToo: true);
+        Tabs.AddHandler(DoubleTappedEvent, OnTabDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
+        Tabs.AddHandler(ContextRequestedEvent, OnTabContextRequested, RoutingStrategies.Bubble, handledEventsToo: true);
+        Tabs.AddHandler(PointerPressedEvent, OnTabPointerPressed, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        Tabs.AddHandler(PointerMovedEvent, OnTabPointerMoved, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        Tabs.AddHandler(PointerReleasedEvent, OnTabPointerReleased, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        Tabs.AddHandler(PointerCaptureLostEvent, (_, _) => EndTabDrag(), RoutingStrategies.Direct | RoutingStrategies.Bubble, handledEventsToo: true);
         Tabs.SelectionChanged += (_, _) => OnSelectedTabChanged();
         Tabs.AddTabButtonClick += (_, _) => NewDocument();
         NoticeBar.Closed += (_, args) =>
@@ -113,40 +124,49 @@ public partial class MainWindow : Window
 
     // ───────────────────────── 标签页管理 ─────────────────────────
 
-    internal List<DocumentTab> AllTabs() =>
-        _tabItems.Select(t => (DocumentTab)t.Tag!).ToList();
+    internal List<DocumentTab> AllTabs() => _tabs.ToList();
+
+    private async void CloseTabFromButton(DocumentTab tab) => await CloseTabAsync(tab);
+
+    /// <summary>鼠标事件源所在的标签（不在任何标签上时为 null）。</summary>
+    private static DocumentTab? TabFromSource(object? source) =>
+        (source as Visual)?.FindAncestorOfType<FATabViewItem>(includeSelf: true)?.Header as DocumentTab;
+
+    private static bool IsOnCloseButton(object? source) =>
+        (source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is { } b && b.Classes.Contains("tabClose");
+
+    private async void OnTabMiddleClick(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != MouseButton.Middle || TabFromSource(e.Source) is not { } tab) return;
+        e.Handled = true;
+        await CloseTabAsync(tab);
+    }
+
+    private async void OnTabDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (IsOnCloseButton(e.Source) || TabFromSource(e.Source) is not { } tab) return;
+        e.Handled = true;
+        await RenameAsync(tab);
+    }
+
+    private void OnTabContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (TabFromSource(e.Source) is not { } tab || e.Source is not Control target) return;
+        e.Handled = true;
+        CreateTabContextMenu(tab).Open(target);
+    }
 
     private DocumentTab AddTab(DocumentViewModel doc, bool select = true)
     {
         var editor = CreateEditor(doc);
         var tab = new DocumentTab(doc, editor);
-
-        tab.CloseButton.Click += async (_, e) =>
-        {
-            e.Handled = true;
-            await CloseTabAsync(tab);
-        };
-        tab.TabItem.PointerReleased += async (_, e) =>
-        {
-            if (e.InitialPressMouseButton == MouseButton.Middle)
-            {
-                e.Handled = true;
-                await CloseTabAsync(tab);
-            }
-        };
-        tab.TabItem.DoubleTapped += async (_, e) =>
-        {
-            e.Handled = true;
-            await RenameAsync(tab);
-        };
-        tab.TabItem.ContextMenu = CreateTabContextMenu(tab);
         doc.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(DocumentViewModel.Notice) && tab == _active) UpdateNoticeBar();
         };
 
         EditorHost.Children.Add(editor);
-        _tabItems.Add(tab.TabItem);
+        _tabs.Add(tab);
         if (select) Select(tab);
         return tab;
     }
@@ -155,7 +175,7 @@ public partial class MainWindow : Window
     {
         var tabs = AllTabs();
         int index = tabs.IndexOf(tab);
-        _tabItems.Remove(tab.TabItem);
+        _tabs.Remove(tab);
         EditorHost.Children.Remove(tab.Editor);
 
         if (tab == _active)
@@ -172,14 +192,14 @@ public partial class MainWindow : Window
 
     private void Select(DocumentTab tab)
     {
-        if (!ReferenceEquals(Tabs.SelectedItem, tab.TabItem))
-            Tabs.SelectedItem = tab.TabItem;
+        if (!ReferenceEquals(Tabs.SelectedItem, tab))
+            Tabs.SelectedItem = tab;
         OnSelectedTabChanged();
     }
 
     private void OnSelectedTabChanged()
     {
-        var tab = (Tabs.SelectedItem as FATabViewItem)?.Tag as DocumentTab;
+        var tab = Tabs.SelectedItem as DocumentTab;
         if (tab is null || tab == _active) return;
 
         if (_active is not null)
@@ -214,6 +234,86 @@ public partial class MainWindow : Window
         {
             if (editor.IsVisible) editor.TextArea.Focus();
         }, DispatcherPriority.Background);
+    }
+
+    // ───────────────────────── 拖动标签排序 ─────────────────────────
+    // FluentAvalonia 自带的拖放排序会让标签脱离界面（消失），这里自己实现：
+    // 按住标签水平拖动，越过相邻标签中线时交换位置。
+
+    private const double TabDragThreshold = 6;
+    private DocumentTab? _dragTab;
+    private Point _dragStart;
+    private bool _isDraggingTab;
+
+    private void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(Tabs).Properties.IsLeftButtonPressed) return;
+        // 按在关闭按钮上不拖动
+        if (IsOnCloseButton(e.Source) || TabFromSource(e.Source) is not { } tab) return;
+        _dragTab = tab;
+        _dragStart = e.GetPosition(Tabs);
+        _isDraggingTab = false;
+    }
+
+    private void OnTabPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragTab is null) return;
+        if (!e.GetCurrentPoint(Tabs).Properties.IsLeftButtonPressed)
+        {
+            EndTabDrag();
+            return;
+        }
+
+        var pos = e.GetPosition(Tabs);
+        if (!_isDraggingTab)
+        {
+            if (Math.Abs(pos.X - _dragStart.X) < TabDragThreshold) return;
+            _isDraggingTab = true;
+            e.Pointer.Capture(Tabs);
+            Select(_dragTab); // 拖哪个标签就选中哪个
+        }
+
+        // 目标位置 = 中线在鼠标左侧的其他标签数
+        int from = _tabs.IndexOf(_dragTab);
+        if (from < 0) { EndTabDrag(); return; }
+        int to = 0;
+        foreach (var other in _tabs)
+        {
+            if (other == _dragTab || other.Header is null) continue;
+            var item = other.TabItem;
+            var origin = item.TranslatePoint(default, Tabs);
+            if (origin is null) continue;
+            if (origin.Value.X + item.Bounds.Width / 2 < pos.X) to++;
+        }
+        if (to != from) MoveTab(from, to);
+        e.Handled = true;
+    }
+
+    private void OnTabPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        bool wasDragging = _isDraggingTab;
+        EndTabDrag();
+        if (wasDragging)
+        {
+            e.Handled = true;
+            FocusEditor();
+        }
+    }
+
+    private void EndTabDrag()
+    {
+        _dragTab = null;
+        _isDraggingTab = false;
+    }
+
+    /// <summary>移动标签位置，保持选中的标签不变。</summary>
+    internal void MoveTab(int from, int to)
+    {
+        if (from == to || from < 0 || to < 0 || from >= _tabs.Count || to >= _tabs.Count) return;
+        var selected = _active;
+        _tabs.Move(from, to);
+        if (selected is not null && !ReferenceEquals(Tabs.SelectedItem, selected))
+            Tabs.SelectedItem = selected;
     }
 
     private ContextMenu CreateTabContextMenu(DocumentTab tab)

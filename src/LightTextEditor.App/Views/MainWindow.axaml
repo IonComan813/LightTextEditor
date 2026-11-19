@@ -26,7 +26,7 @@
                   VerticalAlignment="Top"
                   TabWidthMode="SizeToContent"
                   IsAddTabButtonVisible="True"
-                  CanReorderTabs="True"
+                  CanReorderTabs="False"
                   CanDragTabs="False"
                   Padding="0">
       <ui:FATabView.TabStripHeader>
