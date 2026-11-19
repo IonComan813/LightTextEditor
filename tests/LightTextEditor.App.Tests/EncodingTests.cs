@@ -1,6 +1,9 @@
 using System.Text;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using FluentAvalonia.UI.Controls;
@@ -63,7 +66,7 @@ public class EncodingTests
         await window.OpenFilesAsync([path]);
         var doc = window.ActiveTab!.Doc;
         Assert.Equal("请确认当前文件的编码格式", doc.Notice?.Title);
-        Assert.False(doc.Notice!.IsClosable);
+        Assert.True(doc.Notice!.IsStanding);
         Assert.Contains("GB18030（简体中文）", doc.Notice.Message);
         Assert.Equal(["更换编码重试", "显示正常"], doc.Notice.Actions.Select(a => a.Label));
         Assert.Equal(NoticeIcon.Checkmark, Action(doc, "显示正常").Icon);
@@ -76,11 +79,11 @@ public class EncodingTests
         Assert.True(current.IsDimmed);
         Assert.True(Choice(doc, "UTF-8").IsDimmed);
 
-        // 提示条：下拉按钮在左，✓ 按钮（只有图标，提示文字"显示正常"）在右，没有关闭按钮
+        // 提示条：下拉按钮在左，✓ 按钮（只有图标，提示文字"显示正常"）在右，可以关闭
         Dispatcher.UIThread.RunJobs();
         Assert.True(window.FindControl<Border>("NoticeHost")!.IsVisible);
         var bar = window.FindControl<FAInfoBar>("NoticeBar")!;
-        Assert.False(bar.IsClosable);
+        Assert.True(bar.IsClosable);
         var buttons = Assert.IsType<StackPanel>(bar.Content).Children;
         var dropDown = Assert.IsType<DropDownButton>(buttons[0]);
         Assert.Equal("更换编码重试", dropDown.Content);
@@ -133,9 +136,93 @@ public class EncodingTests
         // 点 ✓ 后才消失（换成是否转换为 UTF-8 的询问，那个可以关闭）
         Action(tab.Doc, "显示正常").Execute();
         Assert.Equal("编码已确认", tab.Doc.Notice?.Title);
-        Assert.True(tab.Doc.Notice!.IsClosable);
-        tab.Doc.Notice = null;
+        Assert.False(tab.Doc.Notice!.IsStanding);
+        tab.Doc.DismissNotice();
         Assert.Null(tab.Doc.Notice);
+    }
+
+    [AvaloniaFact]
+    public async Task ClosingBarBeforeConfirming_KeepsItClosed_UntilAnotherEncodingIsTried()
+    {
+        var (window, library) = CreateWindow();
+        var path = WriteFile(library, "close.txt", Encoding.GetEncoding(950).GetBytes("中文"));
+        await window.OpenFilesAsync([path]);
+        var tab = window.ActiveTab!;
+        Assert.True(tab.Doc.Notice!.IsStanding);
+
+        // 用关闭按钮关掉：仍是"待确认"，但提示条不再自动回来（别的提示关闭后、保存后都不回来）
+        tab.Doc.DismissNotice();
+        Assert.Null(tab.Doc.Notice);
+        Assert.False(tab.Doc.Encoding.IsCertain);
+        tab.Doc.Notice = new DocumentNotice("别的提示", "", NoticeSeverity.Informational, []);
+        tab.Doc.DismissNotice();
+        Assert.Null(tab.Doc.Notice);
+
+        // 顶部"编码"菜单里仍可确认、更换编码重试
+        var items = window.BuildEncodingMenuItems(tab).OfType<MenuItem>().ToList();
+        Assert.Contains(items, i => ((string)i.Header!).StartsWith("确认 "));
+        var reopen = Assert.Single(items, i => (string?)i.Header == "以其他编码重新打开");
+        reopen.Items.OfType<MenuItem>().Single(i => ((string)i.Header!).StartsWith("Big5")).RaiseEvent(
+            new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        // 又在试编码了：提示条重新出现，等待 ✓
+        Assert.Equal("中文", tab.Doc.Document.Text);
+        Assert.Equal("请确认当前文件的编码格式", tab.Doc.Notice?.Title);
+        Assert.Equal("Big5（繁体中文）", Switcher(tab.Doc).Label);
+    }
+
+    [AvaloniaFact]
+    public async Task NoticeBar_CanBeDragged_WithinTheEditorArea()
+    {
+        var (window, library) = CreateWindow();
+        var path = WriteFile(library, "drag.txt", Encoding.GetEncoding(936).GetBytes("你好世界"));
+        await window.OpenFilesAsync([path]);
+        Dispatcher.UIThread.RunJobs();
+
+        var host = window.FindControl<Border>("NoticeHost")!;
+        var area = window.FindControl<Border>("EditorArea")!;
+        Assert.True(host.IsVisible);
+        Assert.Equal(default, window.NoticeOffset);
+
+        // 按在标题文字附近（不是按钮）拖动
+        var grab = host.TranslatePoint(new Avalonia.Point(80, 18), window)!.Value;
+        window.MouseDown(grab, MouseButton.Left);
+        window.MouseMove(grab + new Avalonia.Point(200, 150));
+        window.MouseUp(grab + new Avalonia.Point(200, 150), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(new Avalonia.Vector(200, 150), window.NoticeOffset);
+
+        // 拖得太远：停在编辑区边上，整个提示条仍在编辑区内
+        grab = host.TranslatePoint(new Avalonia.Point(80, 18), window)!.Value;
+        window.MouseDown(grab, MouseButton.Left);
+        window.MouseMove(grab + new Avalonia.Point(5000, 5000));
+        window.MouseUp(grab + new Avalonia.Point(5000, 5000), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        var bounds = new Avalonia.Rect(host.TranslatePoint(default, window)!.Value, host.Bounds.Size);
+        var areaBounds = new Avalonia.Rect(area.TranslatePoint(default, window)!.Value, area.Bounds.Size);
+        Assert.True(areaBounds.Contains(bounds), $"{bounds} 不在 {areaBounds} 内");
+        Assert.Equal(areaBounds.Right, bounds.Right, 0.5);
+        Assert.Equal(areaBounds.Bottom, bounds.Bottom, 0.5);
+
+        // 按在按钮上不会拖动，按钮照常工作
+        var before = window.NoticeOffset;
+        var check = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content is FASymbolIcon);
+        var onCheck = check.TranslatePoint(new Avalonia.Point(check.Bounds.Width / 2, check.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(onCheck, MouseButton.Left);
+        window.MouseMove(onCheck + new Avalonia.Point(-100, -100));
+        window.MouseUp(onCheck + new Avalonia.Point(-100, -100), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(before, window.NoticeOffset);
+
+        // 双击空白处回到左上角
+        grab = host.TranslatePoint(new Avalonia.Point(80, 18), window)!.Value;
+        window.MouseDown(grab, MouseButton.Left);
+        window.MouseUp(grab, MouseButton.Left);
+        window.MouseDown(grab, MouseButton.Left);
+        window.MouseUp(grab, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(default, window.NoticeOffset);
     }
 
     [AvaloniaFact]
@@ -300,7 +387,7 @@ public class EncodingTests
         var tab = window.ActiveTab!;
         Assert.Equal("有无法识别的字节", tab.Doc.Notice?.Title);
         Assert.Equal(["更换编码重试"], tab.Doc.Notice!.Actions.Select(a => a.Label));
-        Assert.True(tab.Doc.Notice.IsClosable);
+        Assert.False(tab.Doc.Notice.IsStanding);
 
         var save = window.SaveActiveAsync();
         var dialog = FindDialog(window)!;

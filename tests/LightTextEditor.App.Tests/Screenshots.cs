@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -92,6 +93,15 @@ public class Screenshots
         await window.OpenFilesAsync([path]);
         Dispatcher.UIThread.RunJobs();
         window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-notice-{theme}.png"));
+
+        // 拖到右下方，不挡住正文
+        var host = window.FindControl<Border>("NoticeHost")!;
+        var grab = host.TranslatePoint(new Avalonia.Point(80, 18), window)!.Value;
+        window.MouseDown(grab, Avalonia.Input.MouseButton.Left);
+        window.MouseMove(grab + new Avalonia.Point(400, 300));
+        window.MouseUp(grab + new Avalonia.Point(400, 300), Avalonia.Input.MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-dragged-{theme}.png"));
 
         // 试一个错误的编码（Windows-1252），再展开下拉：试过的显示为灰色
         var doc = window.ActiveTab!.Doc;

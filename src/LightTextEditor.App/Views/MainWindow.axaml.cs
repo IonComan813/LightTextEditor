@@ -81,9 +81,9 @@ public partial class MainWindow : Window
         };
         NoticeBar.Closed += (_, args) =>
         {
-            if (args.Reason == FAInfoBarCloseReason.CloseButton && _active is not null)
-                _active.Doc.Notice = null;
+            if (args.Reason == FAInfoBarCloseReason.CloseButton) _active?.Doc.DismissNotice();
         };
+        InitializeNoticeDrag();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         EditorArea.AddHandler(PointerWheelChangedEvent, OnEditorAreaWheel, RoutingStrategies.Bubble);
@@ -982,7 +982,6 @@ public partial class MainWindow : Window
         }
 
         NoticeBar.Title = notice.Title;
-        NoticeBar.IsClosable = notice.IsClosable;
         NoticeBar.Message = notice.Message;
         NoticeBar.Severity = notice.Severity switch
         {

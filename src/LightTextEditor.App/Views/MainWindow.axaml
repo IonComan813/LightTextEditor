@@ -125,11 +125,19 @@
       <Panel x:Name="EditorHost" />
     </Border>
 
-    <!-- ③ 提示条（外部修改、编码不确定、已移动等）：浮在编辑区左上角，不挤占正文位置 -->
+    <!-- ③ 提示条（外部修改、编码不确定、已移动等）：浮在编辑区左上角，不挤占正文位置；
+         可以拖动到别处（见 MainWindow.NoticeDrag.cs） -->
     <Border Grid.Row="3" x:Name="NoticeHost" IsVisible="False" ZIndex="10"
             VerticalAlignment="Top" HorizontalAlignment="Left" MaxWidth="560" Margin="16,8,24,0"
             Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
-            CornerRadius="6" BoxShadow="0 4 14 0 #33000000">
+            CornerRadius="6" BoxShadow="0 4 14 0 #33000000"
+            ToolTip.Tip="可以拖动；双击空白处回到左上角" ToolTip.ShowDelay="1200">
+      <Border.Styles>
+        <!-- 整个提示条显示“移动”光标，按钮上仍是普通箭头 -->
+        <Style Selector=":is(Button)">
+          <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+      </Border.Styles>
       <ui:FAInfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" />
     </Border>
 

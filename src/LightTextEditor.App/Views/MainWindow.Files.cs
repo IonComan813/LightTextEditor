@@ -184,7 +184,7 @@ public partial class MainWindow
             actions.Add(new NoticeAction("显示正常", () => ConfirmEncoding(doc)) { Icon = NoticeIcon.Checkmark });
 
         return uncertain
-            ? new DocumentNotice("请确认当前文件的编码格式", message, NoticeSeverity.Warning, actions) { IsClosable = false }
+            ? new DocumentNotice("请确认当前文件的编码格式", message, NoticeSeverity.Warning, actions) { IsStanding = true }
             : new DocumentNotice("有无法识别的字节", message, NoticeSeverity.Warning, actions);
     }
 
@@ -677,8 +677,10 @@ public partial class MainWindow
             return;
         try
         {
-            // 重新打开后仍是"待确认"：用户在提示条上点 ✓ 后才记入编码记录
+            // 重新打开后仍是"待确认"：用户在提示条上点 ✓ 后才记入编码记录。
+            // 从菜单更换编码重试时，之前关掉的提示条重新出现（又在试编码了）
             doc.Reload(encoding);
+            doc.IsStandingNoticeDismissed = false;
             doc.Notice = FindTabByDocument(doc) is { } tab ? EncodingNotice(tab) : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

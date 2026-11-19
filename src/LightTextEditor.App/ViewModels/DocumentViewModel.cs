@@ -51,13 +51,23 @@ public sealed partial class DocumentViewModel : ObservableObject
 
     /// <summary>
     /// 常驻提示：<see cref="Notice"/> 被清空（其他提示关闭、保存后等）时，用它的返回值补上。
-    /// 用于"请确认当前文件的编码格式"，直到用户点 ✓ 为止。
+    /// 用于"请确认当前文件的编码格式"，直到用户点 ✓ 或用关闭按钮关掉它（<see cref="DismissNotice"/>）为止。
     /// </summary>
     public Func<DocumentNotice?>? StandingNotice { get; set; }
 
+    /// <summary>用户用关闭按钮关掉了常驻提示：不再自动补上（直到再次更换编码重试）。</summary>
+    public bool IsStandingNoticeDismissed { get; set; }
+
     partial void OnNoticeChanged(DocumentNotice? value)
     {
-        if (value is null && StandingNotice?.Invoke() is { } standing) Notice = standing;
+        if (value is null && !IsStandingNoticeDismissed && StandingNotice?.Invoke() is { } standing) Notice = standing;
+    }
+
+    /// <summary>用户点了提示条的关闭按钮。关掉的是常驻提示时，之后不再自动显示它。</summary>
+    public void DismissNotice()
+    {
+        if (Notice is { IsStanding: true }) IsStandingNoticeDismissed = true;
+        Notice = null;
     }
 
     [ObservableProperty]
@@ -232,8 +242,8 @@ public enum NoticeSeverity { Informational, Success, Warning, Error }
 /// <summary>编辑区上方的提示条。</summary>
 public sealed record DocumentNotice(string Title, string Message, NoticeSeverity Severity, IReadOnlyList<NoticeAction> Actions)
 {
-    /// <summary>是否显示关闭按钮（常驻提示为 false）。</summary>
-    public bool IsClosable { get; init; } = true;
+    /// <summary>常驻提示（见 <see cref="DocumentViewModel.StandingNotice"/>）：被其他提示替换后会回来，用关闭按钮关掉则不再出现。</summary>
+    public bool IsStanding { get; init; }
 }
 
 public enum NoticeIcon { None, Checkmark }
