@@ -49,9 +49,14 @@ public static class MarkdownAssets
     /// </summary>
     public static string ImageMarkdown(string url, string alt = "")
     {
-        bool needsAngle = url.IndexOfAny([' ', '(', ')', '<', '>']) >= 0;
-        var destination = needsAngle ? "<" + url.Replace("<", "%3C").Replace(">", "%3E") + ">" : url;
         alt = alt.Replace("[", "\\[").Replace("]", "\\]");
-        return $"![{alt}]({destination})";
+        return $"![{alt}]({LinkDestination(url)})";
+    }
+
+    /// <summary>链接地址的写法：有空格或括号时用尖括号包起来。</summary>
+    public static string LinkDestination(string url)
+    {
+        bool needsAngle = url.IndexOfAny([' ', '(', ')', '<', '>']) >= 0;
+        return needsAngle ? "<" + url.Replace("<", "%3C").Replace(">", "%3E") + ">" : url;
     }
 }

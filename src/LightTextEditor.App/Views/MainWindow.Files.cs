@@ -164,13 +164,7 @@ public partial class MainWindow
         if (saveAs)
         {
             var picked = await PickSavePathAsync(doc);
-            if (picked is null) return false;
-            var encoding = doc.IsUntitled
-                ? TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(picked)))
-                : doc.Encoding;
-            if (!await WriteAsync(doc, picked, encoding)) return false;
-            LibraryShortcuts.Ensure(LibraryPath, picked);
-            return true;
+            return picked is not null && await SaveAsToAsync(tab, picked);
         }
 
         if (doc.FilePath is null)
@@ -187,6 +181,23 @@ public partial class MainWindow
             return false;
 
         return await WriteAsync(doc, doc.FilePath, doc.Encoding);
+    }
+
+    /// <summary>
+    /// 另存为指定路径。保存到笔记库以外时，在笔记库的“外部文件”文件夹里放一个指向新文件的快捷方式
+    /// （从笔记库另存出去的文件也能在笔记库里找到）。
+    /// </summary>
+    internal async Task<bool> SaveAsToAsync(DocumentTab tab, string path)
+    {
+        var doc = tab.Doc;
+        var encoding = doc.IsUntitled
+            ? TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path)))
+            : doc.Encoding;
+        if (!await WriteAsync(doc, path, encoding)) return false;
+        if (LibraryShortcuts.Ensure(LibraryPath, path) is not null)
+            ShowTransientNotice(doc, new DocumentNotice("已另存为",
+                $"{path}\n笔记库的“{LibraryShortcuts.FolderName}”文件夹里有指向它的快捷方式。", NoticeSeverity.Success, []));
+        return true;
     }
 
     /// <summary>
@@ -388,7 +399,10 @@ public partial class MainWindow
     internal bool IsExternalFile(DocumentViewModel doc) =>
         doc.FilePath is { } p && !LibraryShortcuts.IsInsideLibrary(LibraryPath, p);
 
-    /// <summary>把笔记库以外的文件移动到笔记库（确认后），并删掉它的快捷方式。</summary>
+    /// <summary>
+    /// 把笔记库以外的文件移动到笔记库（确认后），并删掉它的快捷方式。
+    /// Markdown 文件引用的本地图片一同迁移（见 <see cref="MarkdownImageMigration"/>）。
+    /// </summary>
     internal async Task<bool> MoveToLibraryAsync(DocumentTab tab, bool confirm = true)
     {
         var doc = tab.Doc;
@@ -399,10 +413,17 @@ public partial class MainWindow
         if (File.Exists(target) || Directory.Exists(target))
             target = FileNaming.MakeUniquePath(LibraryPath, Path.GetFileNameWithoutExtension(oldPath), Path.GetExtension(oldPath));
 
+        var images = IsMarkdown(doc)
+            ? MarkdownImageMigration.Plan(doc.Document.Text, oldPath, LibraryPath)
+            : new ImageMigrationPlan([], []);
+        int copied = images.Transfers.Count(t => t.Copy);
+
         if (confirm && !await Dialogs.ConfirmAsync(this, "移动到笔记库",
                 $"将“{Path.GetFileName(oldPath)}”移动到笔记库？\n\n" +
                 $"从：{Path.GetDirectoryName(oldPath)}\n到：{LibraryPath}" +
                 (Path.GetFileName(target) != Path.GetFileName(oldPath) ? $"\n（笔记库中已有同名文件，将保存为“{Path.GetFileName(target)}”）" : "") +
+                (images.IsEmpty ? "" : $"\n\n文中引用的 {images.Transfers.Count} 张图片也会一起放进笔记库" +
+                    (copied > 0 ? $"（其中 {copied} 张在原位置以外或也被其他笔记使用，复制一份）" : "") + "。") +
                 "\n\n原位置将不再保留这个文件。", "移动"))
             return false;
 
@@ -417,7 +438,26 @@ public partial class MainWindow
         }
         doc.UpdatePath(target);
         LibraryShortcuts.Remove(LibraryPath, oldPath);
-        ShowTransientNotice(doc, new DocumentNotice("已移动到笔记库", target, NoticeSeverity.Success, []));
+
+        var failed = MarkdownImageMigration.Execute(images);
+        var edits = images.Edits.Where(e => !failed.Contains(e.Target)).ToList();
+        if (edits.Count > 0)
+        {
+            // 图片换了位置或名字：改写链接。文件原本没有未保存的修改时直接保存
+            bool wasDirty = doc.IsDirty;
+            doc.Document.BeginUpdate();
+            foreach (var edit in edits.OrderByDescending(e => e.Start))
+                doc.Document.Replace(edit.Start, edit.Length, edit.NewText);
+            doc.Document.EndUpdate();
+            if (!wasDirty) await WriteAsync(doc, target, doc.Encoding);
+        }
+
+        if (failed.Count > 0)
+            await Dialogs.ShowErrorAsync(this, "部分图片未能迁移",
+                $"{failed.Count} 张图片没能放进笔记库，文中仍然引用原来的位置。");
+        else
+            ShowTransientNotice(doc, new DocumentNotice("已移动到笔记库",
+                target + (images.IsEmpty ? "" : $"（连同 {images.Transfers.Count} 张图片）"), NoticeSeverity.Success, []));
         return true;
     }
 

@@ -81,4 +81,44 @@ public class TabDragTests
         Assert.Equal(new[] { a, b }, window.AllTabs());
         Assert.Same(a, window.ActiveTab); // 单击切换标签
     }
+
+    [AvaloniaFact]
+    public async Task DraggedTab_FollowsPointer_AboveOtherTabs_ThenSettles()
+    {
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "drag3"), RestoreSession = false };
+        var window = new MainWindow { Width = 1000, Height = 300 };
+        window.Initialize([]);
+        window.Show();
+        var a = window.ActiveTab!;
+        var b = window.NewDocument();
+        var c = window.NewDocument();
+        Dispatcher.UIThread.RunJobs();
+
+        var start = Center(window, a);
+        var mid = Center(window, b) + new Point(5, 0); // 停在 b 上方（已越过 b 的中线）
+        window.MouseDown(start, MouseButton.Left);
+        for (int i = 1; i <= 8; i++)
+        {
+            window.MouseMove(start + (mid - start) * (i / 8.0), RawInputModifiers.LeftMouseButton);
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.Equal(new[] { b, a, c }, window.AllTabs());
+        // 被拖动的标签中心跟着鼠标，盖在其他标签上面
+        Assert.InRange(Center(window, a).X, mid.X - 2, mid.X + 2);
+        Assert.True(a.TabItem.ZIndex > b.TabItem.ZIndex);
+
+        await Task.Delay(80);
+        Dispatcher.UIThread.RunJobs();
+        if (Environment.GetEnvironmentVariable("LTE_SCREENSHOT_DIR") is { Length: > 0 } dir)
+            window.CaptureRenderedFrame()!.Save(Path.Combine(dir, "tab-drag.png"));
+
+        window.MouseUp(mid, MouseButton.Left);
+        for (int i = 0; i < 8; i++) { await Task.Delay(40); Dispatcher.UIThread.RunJobs(); }
+        foreach (var t in window.AllTabs())
+        {
+            Assert.Equal(0, (t.TabItem.RenderTransform as Avalonia.Media.TranslateTransform)?.X ?? 0, 3);
+            Assert.Equal(0, t.TabItem.ZIndex);
+        }
+        Assert.Equal(new[] { b, a, c }, window.AllTabs());
+    }
 }

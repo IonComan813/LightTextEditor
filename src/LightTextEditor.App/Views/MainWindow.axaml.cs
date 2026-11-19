@@ -55,6 +55,9 @@ public partial class MainWindow : Window
         // 标签上的鼠标操作：中键关闭、双击重命名、右键菜单
         Tabs.AddHandler(PointerReleasedEvent, OnTabMiddleClick, RoutingStrategies.Bubble, handledEventsToo: true);
         Tabs.AddHandler(DoubleTappedEvent, OnTabDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
+        // 右键菜单：在右键松开时直接打开（隧道阶段，先于标签控件；只依赖 ContextRequested 时，
+        // 标签控件处理掉松开事件后菜单就不出来）。ContextRequested 留给键盘（菜单键 / Shift+F10）。
+        Tabs.AddHandler(PointerReleasedEvent, OnTabRightClick, RoutingStrategies.Tunnel, handledEventsToo: true);
         Tabs.AddHandler(ContextRequestedEvent, OnTabContextRequested, RoutingStrategies.Bubble, handledEventsToo: true);
         Tabs.AddHandler(PointerPressedEvent, OnTabPointerPressed, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
         Tabs.AddHandler(PointerMovedEvent, OnTabPointerMoved, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
@@ -69,6 +72,7 @@ public partial class MainWindow : Window
         };
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(PointerMovedEvent, OnMenuPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
         AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
 
@@ -176,12 +180,30 @@ public partial class MainWindow : Window
         await RenameAsync(tab);
     }
 
+    private void OnTabRightClick(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != MouseButton.Right || TabFromSource(e.Source) is not { } tab) return;
+        e.Handled = true;
+        OpenTabContextMenu(tab);
+    }
+
     private void OnTabContextRequested(object? sender, ContextRequestedEventArgs e)
     {
-        if (TabFromSource(e.Source) is not { } tab || e.Source is not Control target) return;
+        if (TabFromSource(e.Source) is not { } tab) return;
         e.Handled = true;
-        CreateTabContextMenu(tab).Open(target);
+        OpenTabContextMenu(tab);
     }
+
+    private void OpenTabContextMenu(DocumentTab tab)
+    {
+        if (TabContextMenu is { IsOpen: true } open) open.Close();
+        if (tab.Header is null) return;
+        TabContextMenu = CreateTabContextMenu(tab);
+        TabContextMenu.Open(tab.TabItem);
+    }
+
+    /// <summary>最近打开的标签右键菜单（测试用）。</summary>
+    internal ContextMenu? TabContextMenu { get; private set; }
 
     private DocumentTab AddTab(DocumentViewModel doc, bool select = true)
     {
@@ -293,12 +315,16 @@ public partial class MainWindow : Window
 
     // ───────────────────────── 拖动标签排序 ─────────────────────────
     // FluentAvalonia 自带的拖放排序会让标签脱离界面（消失），这里自己实现：
-    // 按住标签水平拖动，越过相邻标签中线时交换位置。
+    // 被拖动的标签跟着鼠标走、浮在其他标签上方；越过相邻标签中线时交换位置，让开的标签滑到新位置。
 
     private const double TabDragThreshold = 6;
+    private const double TabSlideMilliseconds = 160;
     private DocumentTab? _dragTab;
     private Point _dragStart;
     private bool _isDraggingTab;
+    private double _dragGrabOffset; // 鼠标相对被拖动标签左边缘的位置
+    private readonly Dictionary<Control, (double From, long Start)> _tabSlides = [];
+    private DispatcherTimer? _tabSlideTimer;
 
     private void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -323,24 +349,51 @@ public partial class MainWindow : Window
         if (!_isDraggingTab)
         {
             if (Math.Abs(pos.X - _dragStart.X) < TabDragThreshold) return;
+            if (_dragTab.Header is null) { EndTabDrag(); return; }
             _isDraggingTab = true;
             e.Pointer.Capture(Tabs);
             Select(_dragTab); // 拖哪个标签就选中哪个
+            _dragGrabOffset = _dragStart.X - TabLayoutLeft(_dragTab.TabItem);
         }
 
-        // 目标位置 = 中线在鼠标左侧的其他标签数
         int from = _tabs.IndexOf(_dragTab);
-        if (from < 0) { EndTabDrag(); return; }
+        if (from < 0 || _dragTab.Header is null) { EndTabDrag(); return; }
+
+        // 被拖动的标签应该出现的位置（限制在标签栏范围内）
+        var realized = _tabs.Where(t => t.Header is not null).ToList();
+        double width = _dragTab.TabItem.Bounds.Width;
+        double minLeft = realized.Min(t => TabLayoutLeft(t.TabItem));
+        double maxLeft = realized.Max(t => TabLayoutLeft(t.TabItem) + t.TabItem.Bounds.Width) - width;
+        double left = Math.Clamp(pos.X - _dragGrabOffset, minLeft, Math.Max(minLeft, maxLeft));
+        double center = left + width / 2;
+
+        // 目标位置 = 中线在被拖动标签中心左侧的其他标签数
         int to = 0;
-        foreach (var other in _tabs)
+        foreach (var other in realized)
         {
-            if (other == _dragTab || other.Header is null) continue;
+            if (other == _dragTab) continue;
             var item = other.TabItem;
-            var origin = item.TranslatePoint(default, Tabs);
-            if (origin is null) continue;
-            if (origin.Value.X + item.Bounds.Width / 2 < pos.X) to++;
+            if (TabLayoutLeft(item) + item.Bounds.Width / 2 < center) to++;
         }
-        if (to != from) MoveTab(from, to);
+        if (to != from)
+        {
+            // 记下其他标签现在显示的位置，交换后让它们从这里滑到新位置
+            var before = realized.Where(t => t != _dragTab)
+                .ToDictionary(t => t, t => TabLayoutLeft(t.TabItem) + TabOffset(t.TabItem));
+            MoveTab(from, to);
+            Tabs.UpdateLayout();
+            foreach (var (other, oldLeft) in before)
+            {
+                if (other.Header is null) continue;
+                SlideTab(other.TabItem, oldLeft - TabLayoutLeft(other.TabItem));
+            }
+            if (_dragTab.Header is null) { EndTabDrag(); return; }
+        }
+
+        var dragged = _dragTab.TabItem;
+        _tabSlides.Remove(dragged);
+        dragged.ZIndex = 100; // 浮在经过的标签上方
+        SetTabOffset(dragged, left - TabLayoutLeft(dragged));
         e.Handled = true;
     }
 
@@ -357,8 +410,59 @@ public partial class MainWindow : Window
 
     private void EndTabDrag()
     {
+        // 松开后被拖动的标签滑回它的位置
+        if (_isDraggingTab && _dragTab?.Header is not null)
+            SlideTab(_dragTab.TabItem, TabOffset(_dragTab.TabItem));
         _dragTab = null;
         _isDraggingTab = false;
+    }
+
+    /// <summary>标签在布局中的左边缘（不含拖动 / 动画产生的位移），相对于标签栏。</summary>
+    private double TabLayoutLeft(Control item) =>
+        (item.TranslatePoint(default, Tabs)?.X ?? 0) - TabOffset(item);
+
+    private static double TabOffset(Control item) => (item.RenderTransform as TranslateTransform)?.X ?? 0;
+
+    private static void SetTabOffset(Control item, double x)
+    {
+        if (item.RenderTransform is TranslateTransform t) t.X = x;
+        else item.RenderTransform = new TranslateTransform(x, 0);
+    }
+
+    /// <summary>让标签从偏移 <paramref name="offset"/> 处滑回布局位置。</summary>
+    private void SlideTab(Control item, double offset)
+    {
+        if (Math.Abs(offset) < 0.5)
+        {
+            _tabSlides.Remove(item);
+            SetTabOffset(item, 0);
+            if (_dragTab?.Header is null || item != _dragTab.TabItem) item.ZIndex = 0;
+            return;
+        }
+        SetTabOffset(item, offset);
+        _tabSlides[item] = (offset, System.Diagnostics.Stopwatch.GetTimestamp());
+        _tabSlideTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(15), DispatcherPriority.Render, OnTabSlideTick);
+        _tabSlideTimer.Start();
+    }
+
+    private void OnTabSlideTick(object? sender, EventArgs e)
+    {
+        foreach (var (item, (from, start)) in _tabSlides.ToList())
+        {
+            double t = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds / TabSlideMilliseconds;
+            if (t >= 1)
+            {
+                _tabSlides.Remove(item);
+                SetTabOffset(item, 0);
+                if (_dragTab?.Header is null || item != _dragTab.TabItem) item.ZIndex = 0;
+            }
+            else
+            {
+                double eased = 1 - Math.Pow(1 - t, 3); // 先快后慢
+                SetTabOffset(item, from * (1 - eased));
+            }
+        }
+        if (_tabSlides.Count == 0) _tabSlideTimer?.Stop();
     }
 
     /// <summary>移动标签位置，保持选中的标签不变。</summary>
@@ -414,6 +518,39 @@ public partial class MainWindow : Window
             moveToLibrary.IsEnabled = IsExternalFile(tab.Doc);
         };
         return menu;
+    }
+
+    // ───────────────────────── 菜单 ─────────────────────────
+
+    /// <summary>
+    /// 鼠标移到菜单里不可用的项上时，取消其他项的高亮并收起它们的子菜单。
+    /// （不可用的项收不到鼠标事件，Avalonia 不会切换高亮：从“更改后缀”移到灰色的“移动到笔记库”时，
+    /// “更改后缀”会一直高亮。）
+    /// </summary>
+    private void OnMenuPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!MainMenu.IsOpen) return;
+        DeselectAroundDisabledItem(MainMenu.Items.OfType<MenuItem>(), e);
+    }
+
+    private static void DeselectAroundDisabledItem(IEnumerable<MenuItem> items, PointerEventArgs e)
+    {
+        foreach (var parent in items.Where(i => i.IsSubMenuOpen).ToList())
+        {
+            var children = parent.Items.OfType<MenuItem>().ToList();
+            var disabled = children.FirstOrDefault(c => !c.IsEffectivelyEnabled && c.IsEffectivelyVisible &&
+                new Rect(c.Bounds.Size).Contains(e.GetPosition(c)));
+            if (disabled is not null)
+            {
+                foreach (var sibling in children.Where(c => c != disabled && (c.IsSelected || c.IsSubMenuOpen)))
+                {
+                    sibling.IsSubMenuOpen = false;
+                    sibling.IsSelected = false;
+                }
+                return;
+            }
+            DeselectAroundDisabledItem(children, e);
+        }
     }
 
     // ───────────────────────── 编辑器 ─────────────────────────
