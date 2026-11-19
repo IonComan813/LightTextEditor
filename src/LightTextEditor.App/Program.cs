@@ -1,5 +1,6 @@
 using Avalonia;
 using LightTextEditor.App.Services;
+using Velopack;
 
 namespace LightTextEditor.App;
 
@@ -8,6 +9,10 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // 安装包（Velopack）在安装、更新、卸载时会带特殊参数启动本程序：必须最先处理，处理完会直接退出。
+        // 不是通过安装包运行时（开发、测试）什么也不做。
+        VelopackApp.Build().Run();
+
         // 已有实例在运行：把要打开的文件交给它，然后退出。
         using var instance = new SingleInstance();
         if (!instance.IsFirstInstance)

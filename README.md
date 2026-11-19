@@ -45,6 +45,17 @@ dotnet publish src/LightTextEditor.App -c Release -r win-x64 --self-contained fa
 
 性能优化和测量方法见 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)。
 
+## 发版
+
+GitHub Actions（`.github/workflows/release.yml`）自动构建 Windows 安装包：基于 [Velopack](https://velopack.io/) 的单个
+`LightTextEditor-win-Setup.exe`（自带 .NET 运行时，用户不需要另装），附加到对应的 Release。
+
+- **推送版本标签**（如 `v1.2.3`、`v1.2.3-beta.1`）：构建后附加到该标签的 Release；还没有 Release 时自动创建草稿，检查后手动发布。
+- **在网页上发布 Release**（Draft a new release → 填写新标签 → Publish release）：构建并附加到这个 Release，大约 10 分钟后出现。
+  GitHub 不会为“保存为草稿”触发工作流，要在发布时才开始构建；想先看到安装包再发布，就先推送标签。
+
+版本号必须是 `主.次.修订` 格式（可带 `v` 前缀和预发布后缀）。安装包未做代码签名，第一次运行时 Windows SmartScreen 可能提示“未知发布者”。
+
 ## 目录结构
 
 | 路径 | 内容 |
