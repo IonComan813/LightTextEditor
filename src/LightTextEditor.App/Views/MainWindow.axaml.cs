@@ -881,9 +881,11 @@ public partial class MainWindow : Window
             }
         }
 
-        // Markdown 源码：右侧留白，换行宽度 = 页面宽度（编辑器本身仍铺满，滚动条在窗口右边）
+        // Markdown 源码：自动换行时右侧留白，换行宽度 = 页面宽度（编辑器本身仍铺满，滚动条在窗口右边）。
+        // 不自动换行时不留白：留白处不显示文字，长行会被截在页面宽度处、右边一片空白。
         bool limitMarkdown = !centered && IsMarkdown(tab.Doc);
-        tab.Editor.Padding = limitMarkdown && available > pageWidth ? new Thickness(0, 0, available - pageWidth, 0) : default;
+        bool limitSource = limitMarkdown && _vm.WordWrap && available > pageWidth;
+        tab.Editor.Padding = limitSource ? new Thickness(0, 0, available - pageWidth, 0) : default;
         // Markdown 预览：内容最宽为页面宽度（缩放由预览自己按比例放大，这里用 100% 时的宽度）
         tab.Preview?.SetContentMaxWidth(limitMarkdown ? Settings.CenteredLayoutWidth : double.PositiveInfinity);
 

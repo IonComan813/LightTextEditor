@@ -118,4 +118,26 @@ public class CenteredLayoutTests
         Dispatcher.UIThread.RunJobs();
         Assert.True(window.AllTabs().First(t => t.Doc.Extension == ".txt").Editor.ViewportWidth > 1400);
     }
+
+    [AvaloniaFact]
+    public async Task Markdown_WithoutWordWrap_LongLinesUseFullWidthAndScroll()
+    {
+        var line = string.Concat(Enumerable.Range(0, 120).Select(i => $"第{i}段"));
+        var window = await OpenAsync(new AppSettings { WordWrap = false }, ("b.md", "# 标题\n\n" + line + "\n"));
+        var editor = window.ActiveTab!.Editor;
+        await Task.Delay(50);
+        Dispatcher.UIThread.RunJobs();
+        // 不自动换行时不限制宽度：长行用整个窗口宽度显示，其余部分可以横向滚动看到
+        Assert.Equal(default, editor.Padding);
+        Assert.True(editor.ViewportWidth > 1400);
+        Assert.True(editor.ExtentWidth > editor.ViewportWidth);
+
+        // 打开自动换行：按页面宽度换行；再关掉：恢复整个窗口宽度
+        window.ViewModel.WordWrap = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.InRange(editor.ViewportWidth, 800, 861);
+        window.ViewModel.WordWrap = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(editor.ViewportWidth > 1400);
+    }
 }
