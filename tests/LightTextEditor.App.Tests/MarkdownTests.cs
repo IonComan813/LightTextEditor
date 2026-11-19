@@ -20,7 +20,7 @@ public class MarkdownTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "md-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
         var window = new MainWindow { Width = 1000, Height = 700 };
         window.Initialize([]);
         window.Show();

@@ -17,7 +17,7 @@ public class MainWindowTests
     private static (MainWindow Window, string Library) CreateWindow()
     {
         var library = Path.Combine(TestAppBuilder.Root, "lib-" + Guid.NewGuid().ToString("N"));
-        App.Settings = new AppSettings { LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
         var window = new MainWindow();
         window.Initialize([]);
         window.Show();

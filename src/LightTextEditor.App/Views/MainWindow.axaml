@@ -45,7 +45,7 @@
     <!-- ② 菜单栏 -->
     <Border Grid.Row="1" x:Name="MenuBarBorder">
       <Menu Classes="mainMenu" x:Name="MainMenu" Margin="4,0">
-        <MenuItem Header="文件(_F)">
+        <MenuItem Header="文件(_F)" x:Name="FileMenu" SubmenuOpened="OnFileMenuOpened">
           <MenuItem Header="新建标签页(_N)" InputGesture="Ctrl+N" Click="OnNewClick" />
           <MenuItem Header="打开(_O)…" InputGesture="Ctrl+O" Click="OnOpenClick" />
           <Separator />
@@ -57,6 +57,8 @@
             <MenuItem Header="(占位)" />
           </MenuItem>
           <Separator />
+          <MenuItem Header="移动到笔记库(_M)…" x:Name="MoveToLibraryMenuItem" Click="OnMoveToLibraryClick"
+                    ToolTip.Tip="把当前文件从原位置移动到笔记库" />
           <MenuItem Header="打开笔记库文件夹(_D)" Click="OnOpenLibraryFolderClick" />
           <MenuItem Header="更改笔记库位置…" Click="OnChangeLibraryClick" />
           <Separator />
@@ -100,6 +102,9 @@
             <MenuItem Header="浅色" Tag="Light" ToggleType="Radio" GroupName="theme" x:Name="ThemeLightItem" Click="OnThemeClick" />
             <MenuItem Header="深色" Tag="Dark" ToggleType="Radio" GroupName="theme" x:Name="ThemeDarkItem" Click="OnThemeClick" />
           </MenuItem>
+        </MenuItem>
+        <MenuItem Header="帮助(_H)">
+          <MenuItem Header="Markdown 示例(_M)" Click="OnOpenSampleClick" />
         </MenuItem>
       </Menu>
     </Border>

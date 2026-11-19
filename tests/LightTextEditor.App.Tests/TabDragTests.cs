@@ -16,7 +16,7 @@ public class TabDragTests
     [AvaloniaFact]
     public void DraggingTab_ReordersTabs_AndKeepsThemVisible()
     {
-        App.Settings = new AppSettings { LibraryPath = Path.Combine(TestAppBuilder.Root, "drag"), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "drag"), RestoreSession = false };
         var window = new MainWindow { Width = 1000, Height = 500 };
         window.Initialize([]);
         window.Show();
@@ -66,7 +66,7 @@ public class TabDragTests
     [AvaloniaFact]
     public void ClickingWithoutMoving_DoesNotReorder()
     {
-        App.Settings = new AppSettings { LibraryPath = Path.Combine(TestAppBuilder.Root, "drag2"), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "drag2"), RestoreSession = false };
         var window = new MainWindow { Width = 1000, Height = 500 };
         window.Initialize([]);
         window.Show();

@@ -17,6 +17,7 @@
     <sty:FluentAvaloniaTheme PreferSystemTheme="True" PreferUserAccentColor="True" UseSystemFontOnWindows="True" />
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
     <StyleInclude Source="avares://LiveMarkdown.Avalonia/Styles.axaml" />
+    <StyleInclude Source="avares://LiveMarkdown.Avalonia.Mermaid/Styles.axaml" />
     <StyleInclude Source="avares://LightTextEditor/Styles/AppStyles.axaml" />
   </Application.Styles>
 </Application>

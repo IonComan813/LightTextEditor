@@ -26,6 +26,8 @@ public partial class App : Application
     {
         TextEncoding.EnsureCodePagesRegistered();
         CaptionButtonToolTips.Register();
+        MarkdownHtmlInlines.Register();
+        Fonts.Register(this);
         Settings = JsonStore.LoadSettings();
         ApplyTheme(Settings.Theme);
 

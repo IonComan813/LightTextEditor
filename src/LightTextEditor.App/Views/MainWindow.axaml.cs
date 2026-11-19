@@ -76,7 +76,10 @@ public partial class MainWindow : Window
         ActualThemeVariantChanged += (_, _) =>
         {
             foreach (var t in _tabs)
+            {
                 if (t.Highlighting is not null) SyntaxHighlighting.ApplyTheme(t.Highlighting);
+                ApplySelectionColors(t.Editor);
+            }
         };
         Opened += (_, _) => UpdateBackdrop();
         PropertyChanged += (_, e) =>
@@ -109,6 +112,23 @@ public partial class MainWindow : Window
         }
 
         var files = args.Where(a => !a.StartsWith('-')).ToArray();
+
+        // 第一次启动：在笔记库里放一份 Markdown 示例并打开
+        if (!Settings.SampleNoteCreated)
+        {
+            try
+            {
+                var sample = SampleNote.Ensure(LibraryPath, Settings);
+                Settings.SampleNoteCreated = true;
+                App.SaveSettings();
+                if (files.Length == 0) files = [sample];
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // 笔记库不可写时跳过，不影响启动
+            }
+        }
+
         if (files.Length > 0)
             _ = OpenFilesAsync(files);
         else if (AllTabs().Count == 0)
@@ -369,6 +389,7 @@ public partial class MainWindow : Window
             return Task.CompletedTask;
         });
 
+        var moveToLibrary = Item("移动到笔记库…", () => MoveToLibraryAsync(tab));
         var menu = new ContextMenu
         {
             Items =
@@ -379,6 +400,7 @@ public partial class MainWindow : Window
                 new Separator(),
                 Item("保存", () => SaveAsync(tab), "Ctrl+S"),
                 Item("重命名…", () => RenameAsync(tab), "F2"),
+                moveToLibrary,
                 new Separator(),
                 copyPath,
                 reveal,
@@ -387,6 +409,7 @@ public partial class MainWindow : Window
         menu.Opening += (_, _) =>
         {
             copyPath.IsEnabled = reveal.IsEnabled = tab.Doc.FilePath is not null;
+            moveToLibrary.IsEnabled = IsExternalFile(tab.Doc);
         };
         return menu;
     }
@@ -418,6 +441,7 @@ public partial class MainWindow : Window
         o.AllowScrollBelowDocument = true;
         o.EnableImeSupport = true;
 
+        ApplySelectionColors(editor);
         var textView = editor.TextArea.TextView;
         textView.CurrentLineBackground = new SolidColorBrush(Color.FromArgb(0x14, 0x80, 0x80, 0x80));
         textView.CurrentLineBorder = new Pen(new SolidColorBrush(Color.FromArgb(0x22, 0x80, 0x80, 0x80)), 1);
@@ -455,6 +479,21 @@ public partial class MainWindow : Window
         editor.LayoutUpdated += OnFirstLayout;
 
         return editor;
+    }
+
+    /// <summary>
+    /// 选中文字的背景：主题强调色的 30%，保留文字本身的颜色（默认的实心蓝底会盖住文字）。
+    /// </summary>
+    private void ApplySelectionColors(TextEditor editor)
+    {
+        var accent = Color.FromRgb(0x2F, 0x6F, 0xED);
+        if (Application.Current?.TryGetResource("SystemAccentColor", ActualThemeVariant, out var value) == true && value is Color c)
+            accent = c;
+        var area = editor.TextArea;
+        area.SelectionBrush = new SolidColorBrush(Color.FromArgb(0x4D, accent.R, accent.G, accent.B));
+        area.SelectionForeground = null;
+        area.SelectionBorder = null;
+        area.SelectionCornerRadius = 2;
     }
 
     /// <summary>

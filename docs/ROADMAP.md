@@ -65,7 +65,8 @@
 - **语法高亮**：`AvaloniaEdit.TextMate` + `TextMateSharp.Grammars`，直接使用 VS Code 的 TextMate 语法和主题（Dark+/Light+ 等），覆盖几十种语言，按扩展名自动选择。这正是"现成库"。
 - **Markdown 源码 ⇄ 渲染切换**（如 `Ctrl+E`）：
   - **已采用 `LiveMarkdown.Avalonia`**（基于 Markdig 解析，GFM 表格 / 任务列表、TextMate 代码高亮、相对路径图片）。实测对比时 `Markdown.Avalonia` 12.0.2 不识别任务列表、代码块内容为空，故放弃。
-  - LaTeX 公式、Mermaid 图表：LiveMarkdown 有可选扩展包（`LiveMarkdown.Avalonia.Math` / `.Mermaid`），v1 暂不开启，需要时可以直接加上，不必走 WebView。
+  - LaTeX 公式、Mermaid 图表：已通过 LiveMarkdown 的扩展包（`LiveMarkdown.Avalonia.Math`，基于 RaTeX；`.Mermaid`，基于 Mermaider，纯 .NET）开启，不需要 WebView。
+  - LiveMarkdown 不渲染 HTML：常用行内标签（`<u>`、`<sub>`、`<sup>`、`<mark>`、`<b>`、`<i>`、`<s>`、`<br>`）在解析后转换为对应的 Markdig 节点；上下标用 Unicode 上下标字符显示（排版引擎不支持基线偏移）。
   - 切换时尽量同步滚动位置（按源码行号映射到渲染块）。
   - 渲染模式为只读。"所见即所得编辑"（类似 Typora）是另一个数量级的工程，**不建议**纳入本项目。
 - **Ctrl+V 粘贴图片**：
@@ -201,6 +202,9 @@ LightTextEditor.sln
 - [x] Markdown 源码 ⇄ 渲染切换（`Ctrl+E`、状态栏按钮；`Esc` 或双击预览返回编辑），按比例同步滚动位置
 - [x] `Ctrl+V` 粘贴截图 → `assets/笔记名-时间.png` + 插入 `![]()`；粘贴 / 拖入图片文件（文档目录外的图片先复制到 `assets/`）；剪贴板同时有文字时以文字为准
 - [x] 预览中点击链接：网址用浏览器打开，指向其他笔记的相对链接在编辑器中打开
+- [x] LaTeX 公式、Mermaid 图表、GitHub 风格提示框、常用行内 HTML 标签
+- [x] 自带“Markdown 示例”笔记（第一次启动时放入笔记库，“帮助”菜单可重新打开）
+- [x] 笔记库外的文件：笔记库“外部文件”文件夹中放快捷方式（Windows .lnk / 其他系统符号链接），文件仍保存在原位置；“文件 → 移动到笔记库”
 - [ ] **待验证（只能在 Windows 上做）**：截图工具（Win+Shift+S）放到剪贴板的位图能否被识别
 
 > **到这里就是一个可日常使用的 MVP（约 5~8 周）。** ✅ M2 已完成（待 Windows 实机验证）
@@ -249,7 +253,7 @@ LightTextEditor.sln
 |------|------|--------|------|
 | AvaloniaEdit 中文 IME 体验差 | 高 | 中 | M0 第一项验证；必要时向上游提 issue/PR |
 | FluentAvalonia 与 Avalonia 12 兼容性 | 中 | 低 | 已解决：FluentAvalonia 3.1 正式版支持 Avalonia 12 |
-| Markdown 渲染功能不全（公式、Mermaid） | 低 | 中 | LiveMarkdown 有可选扩展包，需要时加上即可 |
+| Markdown 渲染功能不全（公式、Mermaid） | 低 | 低 | 已通过 LiveMarkdown 扩展包支持 |
 | 加密密钥丢失导致数据无法恢复 | **极高** | 低 | 强制设置恢复密码；导出恢复密钥 |
 | 编码误判导致保存后乱码 | 高 | 中 | "待确认"状态不转码 + 无损检查 + 历史快照 |
 | 保存时写坏文件 | 高 | 低 | 原子写入 + 写前快照 |
@@ -261,5 +265,5 @@ LightTextEditor.sln
 
 1. **第 5 条**：不往文件内容里写编码声明；改为"新文件 UTF-8（txt/md 带 BOM）+ 外部元数据记录已确认的编码 + 提供一键转 UTF-8"。
 2. **第 7 条**：Windows Hello 只能作为"解锁方式"，真正加密靠 AES-GCM + 信封密钥；必须设计恢复密码。
-3. **第 4 条**：Markdown 渲染模式为只读预览，不做所见即所得；公式/图表 v1 暂不开启（有现成扩展包）。
+3. **第 4 条**：Markdown 渲染模式为只读预览，不做所见即所得；公式和 Mermaid 图表已支持。
 4. **第 3 条**：取消自动保存，改为手动保存（Ctrl+S），未保存时标签显示 ●。

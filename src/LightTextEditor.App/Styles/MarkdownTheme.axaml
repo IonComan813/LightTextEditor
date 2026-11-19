@@ -14,6 +14,12 @@
       <Color x:Key="CodeInlineColor">#B42357</Color>
       <Color x:Key="QuoteBorderColor">#2F6FED</Color>
       <tm:ThemeName x:Key="MarkdownCodeTheme">LightPlus</tm:ThemeName>
+      <SolidColorBrush x:Key="MarkdownHighlightBrush" Color="#FFF3A6" />
+      <SolidColorBrush x:Key="AlertNoteBrush" Color="#0969DA" />
+      <SolidColorBrush x:Key="AlertTipBrush" Color="#1A7F37" />
+      <SolidColorBrush x:Key="AlertImportantBrush" Color="#8250DF" />
+      <SolidColorBrush x:Key="AlertWarningBrush" Color="#9A6700" />
+      <SolidColorBrush x:Key="AlertCautionBrush" Color="#CF222E" />
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <Color x:Key="ForegroundColor">#FFFFFFFF</Color>
@@ -23,6 +29,12 @@
       <Color x:Key="CodeInlineColor">#F48FB1</Color>
       <Color x:Key="QuoteBorderColor">#6EA0FF</Color>
       <tm:ThemeName x:Key="MarkdownCodeTheme">DarkPlus</tm:ThemeName>
+      <SolidColorBrush x:Key="MarkdownHighlightBrush" Color="#665A1E" />
+      <SolidColorBrush x:Key="AlertNoteBrush" Color="#4493F8" />
+      <SolidColorBrush x:Key="AlertTipBrush" Color="#3FB950" />
+      <SolidColorBrush x:Key="AlertImportantBrush" Color="#AB7DF8" />
+      <SolidColorBrush x:Key="AlertWarningBrush" Color="#D29922" />
+      <SolidColorBrush x:Key="AlertCautionBrush" Color="#F85149" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 

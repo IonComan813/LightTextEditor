@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
+using LightTextEditor.App.Services;
 using LightTextEditor.App.ViewModels;
 using LightTextEditor.Core.Library;
 using LightTextEditor.Core.Text;
@@ -64,6 +65,8 @@ public partial class MainWindow
 
     private async Task<DocumentTab?> OpenFileAsync(string path)
     {
+        // 快捷方式 / 符号链接：打开它指向的文件
+        path = LibraryShortcuts.ResolveForOpening(path);
         if (FindTab(path) is { } existing) return existing;
 
         try
@@ -91,7 +94,10 @@ public partial class MainWindow
                     $"“{info.Name}”看起来是二进制文件，以文本方式打开并保存可能会损坏它。仍要打开吗？", "打开"))
                 return null;
 
-            return AddLoadedDocument(path, loaded);
+            var tab = AddLoadedDocument(path, loaded);
+            // 笔记库以外的文件：在笔记库里放一个快捷方式（文件仍保存在原位置）
+            LibraryShortcuts.Ensure(LibraryPath, path);
+            return tab;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -105,6 +111,7 @@ public partial class MainWindow
     {
         try
         {
+            path = LibraryShortcuts.ResolveForOpening(path);
             if (FindTab(path) is { } existing) return existing;
             if (new FileInfo(path).Length > LargeFileThreshold) return null;
             var loaded = TextFileIO.Load(path, Settings.NewFileLineEnding);
@@ -164,7 +171,9 @@ public partial class MainWindow
             var encoding = doc.IsUntitled
                 ? TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(picked)))
                 : doc.Encoding;
-            return await WriteAsync(doc, picked, encoding);
+            if (!await WriteAsync(doc, picked, encoding)) return false;
+            LibraryShortcuts.Ensure(LibraryPath, picked);
+            return true;
         }
 
         if (doc.FilePath is null)
@@ -359,8 +368,15 @@ public partial class MainWindow
         if (doc.FilePath is null || newPath == doc.FilePath) return true;
         try
         {
-            File.Move(doc.FilePath, newPath);
+            var oldPath = doc.FilePath;
+            File.Move(oldPath, newPath);
             doc.UpdatePath(newPath);
+            // 外部文件改名后，笔记库里的快捷方式也跟着换
+            if (!LibraryShortcuts.IsInsideLibrary(LibraryPath, oldPath))
+            {
+                LibraryShortcuts.Remove(LibraryPath, oldPath);
+                LibraryShortcuts.Ensure(LibraryPath, newPath);
+            }
             return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -368,6 +384,44 @@ public partial class MainWindow
             await Dialogs.ShowErrorAsync(this, "重命名失败", e.Message);
             return false;
         }
+    }
+
+    // ───────────────────────── 移动到笔记库 ─────────────────────────
+
+    internal bool IsExternalFile(DocumentViewModel doc) =>
+        doc.FilePath is { } p && !LibraryShortcuts.IsInsideLibrary(LibraryPath, p);
+
+    /// <summary>把笔记库以外的文件移动到笔记库（确认后），并删掉它的快捷方式。</summary>
+    internal async Task<bool> MoveToLibraryAsync(DocumentTab tab, bool confirm = true)
+    {
+        var doc = tab.Doc;
+        if (doc.FilePath is not { } oldPath || !IsExternalFile(doc)) return false;
+
+        Directory.CreateDirectory(LibraryPath);
+        var target = Path.Combine(LibraryPath, Path.GetFileName(oldPath));
+        if (File.Exists(target) || Directory.Exists(target))
+            target = FileNaming.MakeUniquePath(LibraryPath, Path.GetFileNameWithoutExtension(oldPath), Path.GetExtension(oldPath));
+
+        if (confirm && !await Dialogs.ConfirmAsync(this, "移动到笔记库",
+                $"将“{Path.GetFileName(oldPath)}”移动到笔记库？\n\n" +
+                $"从：{Path.GetDirectoryName(oldPath)}\n到：{LibraryPath}" +
+                (Path.GetFileName(target) != Path.GetFileName(oldPath) ? $"\n（笔记库中已有同名文件，将保存为“{Path.GetFileName(target)}”）" : "") +
+                "\n\n原位置将不再保留这个文件。", "移动"))
+            return false;
+
+        try
+        {
+            File.Move(oldPath, target);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            await Dialogs.ShowErrorAsync(this, "移动失败", e.Message);
+            return false;
+        }
+        doc.UpdatePath(target);
+        LibraryShortcuts.Remove(LibraryPath, oldPath);
+        ShowTransientNotice(doc, new DocumentNotice("已移动到笔记库", target, NoticeSeverity.Success, []));
+        return true;
     }
 
     // ───────────────────────── 关闭 ─────────────────────────

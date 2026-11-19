@@ -81,6 +81,17 @@ public partial class MainWindow
         if (_active is not null) await RenameAsync(_active);
     }
 
+    private void OnFileMenuOpened(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source != FileMenu) return;
+        MoveToLibraryMenuItem.IsEnabled = _active is not null && IsExternalFile(_active.Doc);
+    }
+
+    private async void OnMoveToLibraryClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is not null) await MoveToLibraryAsync(_active);
+    }
+
     private void OnOpenLibraryFolderClick(object? sender, RoutedEventArgs e) => Shell.OpenFolder(LibraryPath);
 
     private async void OnChangeLibraryClick(object? sender, RoutedEventArgs e)
@@ -105,6 +116,21 @@ public partial class MainWindow
     }
 
     private void OnExitClick(object? sender, RoutedEventArgs e) => Close();
+
+    // ───────────────────────── 帮助菜单 ─────────────────────────
+
+    /// <summary>打开 Markdown 示例（不存在时重新生成一份）。</summary>
+    private async void OnOpenSampleClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await OpenFilesAsync([SampleNote.Ensure(LibraryPath, Settings)]);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await Dialogs.ShowErrorAsync(this, "无法打开示例", ex.Message);
+        }
+    }
 
     // ───────────────────────── 编辑菜单 ─────────────────────────
 

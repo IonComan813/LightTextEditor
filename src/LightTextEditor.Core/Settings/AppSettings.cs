@@ -34,6 +34,9 @@ public sealed class AppSettings
     /// <summary>启动时重新打开上次关闭时打开着的文件。</summary>
     public bool RestoreSession { get; set; } = true;
 
+    /// <summary>是否已经在笔记库里放过 Markdown 示例（只在第一次启动时自动放，用户删掉后不再自动生成）。</summary>
+    public bool SampleNoteCreated { get; set; }
+
     /// <summary>"System" / "Light" / "Dark"。</summary>
     public string Theme { get; set; } = "System";
 

@@ -10,6 +10,9 @@ namespace LightTextEditor.App.Views;
 /// <summary>Markdown 渲染预览（只读）。</summary>
 internal sealed class MarkdownPreview : ScrollViewer
 {
+    // 子类默认拿不到 ScrollViewer 的控件模板（没有模板就不能滚动），沿用 ScrollViewer 的样式
+    protected override Type StyleKeyOverride => typeof(ScrollViewer);
+
     private readonly MarkdownRenderer _renderer;
     private readonly ObservableStringBuilder _markdown = new();
 

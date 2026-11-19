@@ -26,7 +26,7 @@ public class Screenshots
         Avalonia.Application.Current!.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
         var library = Path.Combine(TestAppBuilder.Root, "shots-" + theme);
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
 
         var saved = Path.Combine(library, "读书笔记.txt");
         File.WriteAllText(saved, "# 读书笔记\n\n## 第一章\n\n这是一段已经保存的内容。\nThe quick brown fox jumps over the lazy dog.\n");
