@@ -55,9 +55,10 @@ GitHub Actions（`.github/workflows/release.yml`）自动构建两种 Windows �
 | `LightTextEditor-win-Setup.exe` | 自带 .NET 运行时，不需要另装任何东西（约 75 MB） |
 | `LightTextEditor-win-slim-Setup.exe` | 不含 .NET（约 40 MB）；电脑上没有 .NET 10 桌面运行时时，安装程序会自动下载安装（需要联网，可能请求管理员权限） |
 
-- **推送版本标签**（如 `v1.2.3`、`v1.2.3-beta.1`）：构建后附加到该标签的 Release；还没有 Release 时自动创建草稿，检查后手动发布。
-- **在网页上发布 Release**（Draft a new release → 填写新标签 → Publish release）：构建并附加到这个 Release，大约 10 分钟后出现。
-  GitHub 不会为“保存为草稿”触发工作流，要在发布时才开始构建；想先看到安装包再发布，就先推送标签。
+- **推送版本标签**（如 `v1.2.3`、`v1.2.3-beta.1`）：构建后附加到该标签的 Release；还没有 Release 时自动创建草稿，检查后手动发布（发布时不会再构建一次）。
+- **在网页上发布 Release 并新建标签**（Draft a new release → 填写新标签 → Publish release）：发布时 GitHub 创建标签，由此触发构建，几分钟后安装包出现在这个 Release 中。
+  GitHub 不会为“保存为草稿”触发工作流；想先看到安装包再发布，就先推送标签。
+- **为已有的标签补建 / 重建**：Actions → 构建安装包 → Run workflow，填写标签。
 
 版本号必须是 `主.次.修订` 格式（可带 `v` 前缀和预发布后缀），最小 0.0.1。安装包未做代码签名，第一次运行时 Windows SmartScreen 可能提示“未知发布者”。
 

@@ -3,36 +3,37 @@
 # - LightTextEditor-win-slim-Setup.exe：不含 .NET（约 40 MB）；电脑上没有 .NET 10 桌面运行时时，
 #   安装程序会自动下载安装（需要联网，可能请求管理员权限）
 #
-# 触发方式：
+# 触发方式（只由“新标签”触发，每个版本只构建一次）：
 # - 推送版本标签（v1.2.3 或 1.2.3，可带预发布后缀如 v1.2.3-beta.1）：构建后附加到该标签的 Release；
-#   还没有 Release 时自动创建一个草稿（Draft），检查后手动发布。
-# - 在 GitHub 上发布 Release（Draft a new release → 选择新标签 → Publish）：构建并附加到这个 Release。
-#   注意 GitHub 不会为“保存为草稿”触发工作流（标签在发布时才创建）。
-#   如果这个 Release 已经带有安装包（例如先推送了标签），不会重新构建，已发布的文件保持不变。
-# - 修改本文件的 Pull Request、手动运行（Actions → 构建安装包 → Run workflow）：只构建，不上传到 Release，
-#   安装包可以在运行结果的 Artifacts 中下载。
+#   还没有 Release 时自动创建一个草稿（Draft），检查后手动发布（发布时不会再构建）。
+# - 在 GitHub 上发布 Release 并新建标签（Draft a new release → 填写新标签 → Publish）：发布时 GitHub 创建标签，
+#   同样由上面的标签触发，构建后附加到这个 Release。不另外监听“Release 已发布”事件：
+#   那样新建标签和发布 Release 会各触发一次，同一个版本构建两遍。
+#   GitHub 不会为“保存为草稿”触发工作流（标签在发布时才创建）。
+# - 手动运行（Actions → 构建安装包 → Run workflow）：填写已有的标签时，构建该标签并附加到它的 Release
+#   （例如为旧标签补上安装包、重新构建）；不填时只构建，不上传。
+# - 修改本文件的 Pull Request：只构建，不上传。
+# 只构建的运行，安装包可以在运行结果的 Artifacts 中下载。
 name: 构建安装包
 
 on:
   push:
     tags: ['v[0-9]*', '[0-9]*']
-  release:
-    types: [published]
   pull_request:
     paths: ['.github/workflows/release.yml']
   workflow_dispatch:
     inputs:
-      version:
-        description: '版本号（只构建，不上传）'
+      tag:
+        description: '已有的版本标签（如 v1.2.3）：构建并附加到它的 Release。不填则只构建、不上传'
         required: false
-        default: '0.0.1-manual'
+        default: ''
 
 permissions:
   contents: write
 
-# 发布 Release 时如果同时创建了标签，两个事件会各触发一次：同一标签只保留最后一次运行
+# 同一个标签（或分支）同时只运行一次，新的运行取消旧的
 concurrency:
-  group: installer-${{ github.event.release.tag_name || github.ref }}
+  group: installer-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -47,6 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
@@ -65,15 +68,13 @@ jobs:
         id: version
         env:
           EVENT: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
           REF_NAME: ${{ github.ref_name }}
-          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TAG: ${{ inputs.tag }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           case "$EVENT" in
-            release) tag="$RELEASE_TAG" ;;
             push) tag="$REF_NAME" ;;
-            workflow_dispatch) tag="" ; version="${INPUT_VERSION:-0.0.1-manual}" ;;
+            workflow_dispatch) tag="$INPUT_TAG" ; version="0.0.1-manual" ;;
             *) tag="" ; version="0.0.1-ci.$RUN_NUMBER" ;;
           esac
           if [ -n "$tag" ]; then version="${tag#[vV]}"; fi
@@ -90,28 +91,15 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "标签：${tag:-（无，只构建）}  版本：$version"
 
-      - name: 检查 Release 是否已有安装包
-        id: existing
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -q -- '-Setup\.exe$'; then
-            echo "这个 Release 已经带有安装包，跳过构建（不替换已发布的文件）。"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v6
-        if: steps.existing.outputs.skip != 'true'
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-dotnet@v5
-        if: steps.existing.outputs.skip != 'true'
         with:
           dotnet-version: 10.0.x
 
       - name: 发布（预编译；自带运行时版和不含运行时版）
-        if: steps.existing.outputs.skip != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -121,7 +109,6 @@ jobs:
             -p:Version="$VERSION" -o publish/slim
 
       - name: 打包（Velopack）
-        if: steps.existing.outputs.skip != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           AUTHORS: ${{ github.repository_owner }}
@@ -138,7 +125,6 @@ jobs:
           ls -la Releases
 
       - name: 上传到运行结果（Artifacts）
-        if: steps.existing.outputs.skip != 'true'
         uses: actions/upload-artifact@v6
         with:
           name: LightTextEditor-${{ steps.version.outputs.version }}-win
@@ -146,7 +132,7 @@ jobs:
           if-no-files-found: error
 
       - name: 附加到 GitHub Release
-        if: steps.existing.outputs.skip != 'true' && steps.version.outputs.tag != ''
+        if: steps.version.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
