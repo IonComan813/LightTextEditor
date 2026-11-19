@@ -7,6 +7,7 @@
         Title="{Binding WindowTitle}"
         Width="1100" Height="720" MinWidth="480" MinHeight="300"
         WindowStartupLocation="CenterScreen"
+        Icon="avares://LightTextEditor/Assets/app.ico"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="32"
         WindowDecorationsTheme="{StaticResource LteWindowDecorations}"
@@ -29,7 +30,11 @@
                   CanDragTabs="False"
                   Padding="0">
       <ui:FATabView.TabStripHeader>
-        <Border x:Name="TabStripLeftInset" Background="Transparent" Width="8" />
+        <!-- 应用图标（写字板 + 笔），同时是拖动区 -->
+        <Border x:Name="TabStripLeftInset" Background="Transparent" Padding="12,0,8,0">
+          <Image Source="{StaticResource AppIcon}" Width="16" Height="16"
+                 VerticalAlignment="Center" IsHitTestVisible="False" />
+        </Border>
       </ui:FATabView.TabStripHeader>
       <ui:FATabView.TabStripFooter>
         <!-- 给系统标题栏按钮（最小化/最大化/关闭）留出位置，同时作为拖动区 -->

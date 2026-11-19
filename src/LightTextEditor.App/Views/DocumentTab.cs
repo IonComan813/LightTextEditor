@@ -25,6 +25,7 @@ internal sealed class DocumentTab
 
         _titleText = new TextBlock
         {
+            Classes = { "tabTitle" },
             VerticalAlignment = VerticalAlignment.Center,
             MaxWidth = 220,
             TextTrimming = TextTrimming.CharacterEllipsis,

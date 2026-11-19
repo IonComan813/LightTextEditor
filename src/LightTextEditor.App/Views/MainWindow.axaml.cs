@@ -43,7 +43,7 @@ public partial class MainWindow : Window
         if (OperatingSystem.IsMacOS())
         {
             // macOS 的红绿灯按钮在左侧
-            TabStripLeftInset.Width = 76;
+            TabStripLeftInset.Padding = new Thickness(76, 0, 8, 0);
             TabStripFooterDragArea.MinWidth = 40;
         }
 
@@ -189,6 +189,7 @@ public partial class MainWindow : Window
         }
 
         _active = tab;
+        ApplyViewOptions(tab.Editor); // 后台标签页在切到前台时才同步行号、换行、缩放
         tab.Editor.IsVisible = true;
         _vm.ActiveDocument = tab.Doc;
         UpdateCaretStatus();
@@ -323,13 +324,34 @@ public partial class MainWindow : Window
         return editor;
     }
 
+    /// <summary>
+    /// 把视图选项（行号、自动换行、缩放）同步到编辑器。只对当前（可见的）编辑器调用：
+    /// AvaloniaEdit 打开行号时会新建行号控件，若编辑器此时被隐藏，该控件未经测量就会被渲染，
+    /// 字号为 0 导致崩溃。
+    /// </summary>
+    private void ApplyViewOptions(TextEditor editor)
+    {
+        if (editor.WordWrap != _vm.WordWrap) editor.WordWrap = _vm.WordWrap;
+        var fontSize = Settings.EditorFontSize * _vm.Zoom;
+        if (editor.FontSize != fontSize) editor.FontSize = fontSize;
+        if (editor.ShowLineNumbers != _vm.ShowLineNumbers)
+        {
+            editor.ShowLineNumbers = _vm.ShowLineNumbers;
+            StyleLineNumberMargin(editor);
+        }
+    }
+
     /// <summary>行号与正文之间不用分隔虚线，改为留白，更接近 Windows 11 记事本的观感。</summary>
     private static void StyleLineNumberMargin(TextEditor editor)
     {
         foreach (var margin in editor.TextArea.LeftMargins)
         {
             if (margin is AvaloniaEdit.Editing.LineNumberMargin numbers)
+            {
                 numbers.Margin = new Thickness(12, 0, 4, 0);
+                // 保险：立即测量一次，让行号控件拿到字号（见 ApplyViewOptions 的说明）
+                numbers.Measure(Size.Infinity);
+            }
             else if (AvaloniaEdit.Editing.DottedLineMargin.IsDottedLineMargin(margin))
                 margin.IsVisible = false;
         }
@@ -349,7 +371,7 @@ public partial class MainWindow : Window
     private void SetZoom(double zoom)
     {
         _vm.Zoom = Math.Round(Math.Clamp(zoom, 0.5, 4.0), 1);
-        foreach (var t in AllTabs()) t.Editor.FontSize = Settings.EditorFontSize * _vm.Zoom;
+        if (_active is not null) ApplyViewOptions(_active.Editor);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -357,16 +379,12 @@ public partial class MainWindow : Window
         switch (e.PropertyName)
         {
             case nameof(MainViewModel.WordWrap):
-                foreach (var t in AllTabs()) t.Editor.WordWrap = _vm.WordWrap;
+                if (_active is not null) ApplyViewOptions(_active.Editor);
                 Settings.WordWrap = _vm.WordWrap;
                 App.SaveSettings();
                 break;
             case nameof(MainViewModel.ShowLineNumbers):
-                foreach (var t in AllTabs())
-                {
-                    t.Editor.ShowLineNumbers = _vm.ShowLineNumbers;
-                    StyleLineNumberMargin(t.Editor);
-                }
+                if (_active is not null) ApplyViewOptions(_active.Editor);
                 Settings.ShowLineNumbers = _vm.ShowLineNumbers;
                 App.SaveSettings();
                 break;

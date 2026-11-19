@@ -8,6 +8,7 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://LightTextEditor/Styles/WindowDecorations.axaml" />
+        <ResourceInclude Source="avares://LightTextEditor/Styles/AppIcon.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>
