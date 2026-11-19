@@ -31,12 +31,27 @@ internal sealed class MarkdownPreview : ScrollViewer
     /// </summary>
     public event Func<int, bool, bool>? TaskToggled;
 
+    static MarkdownPreview()
+    {
+        // 代码块不自动换行且代码超出宽度时（会出现横向滚动条）加上 hscroll 类，
+        // 样式据此在代码下方给滚动条留出位置（见 Styles/AppStyles.axaml）；放得下时不留空
+        ExtentProperty.Changed.AddClassHandler<ScrollViewer>((sv, _) => UpdateCodeBlockScrollRoom(sv));
+        ViewportProperty.Changed.AddClassHandler<ScrollViewer>((sv, _) => UpdateCodeBlockScrollRoom(sv));
+    }
+
+    private static void UpdateCodeBlockScrollRoom(ScrollViewer scrollViewer)
+    {
+        if (scrollViewer.Name != "PART_ScrollViewer" || scrollViewer.TemplatedParent is not CodeBlock block) return;
+        bool overflow = !block.IsCodeWrapped && scrollViewer.Extent.Width > scrollViewer.Viewport.Width + 0.5;
+        block.Classes.Set("hscroll", overflow);
+    }
+
     public MarkdownPreview()
     {
         _renderer = new MarkdownRenderer
         {
             MarkdownBuilder = _markdown,
-            MaxWidth = 900,
+            // 靠左、铺满宽度，与源码编辑器一致；需要窄一点的版面时用“查看 → 居中布局”
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Margin = new Thickness(32, 20, 32, 40),
         };
@@ -48,7 +63,7 @@ internal sealed class MarkdownPreview : ScrollViewer
         _renderer.AddHandler(Button.ClickEvent, OnButtonClick);
 
         // 缩放：整体按比例放大（文字、图片、代码块一起），相当于浏览器的缩放
-        _zoomHost = new LayoutTransformControl { Child = _renderer };
+        _zoomHost = new LayoutTransformControl { Child = _renderer, HorizontalAlignment = HorizontalAlignment.Stretch };
 
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         VerticalScrollBarVisibility = ScrollBarVisibility.Auto;

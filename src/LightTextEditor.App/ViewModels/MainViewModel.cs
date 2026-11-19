@@ -25,6 +25,7 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _isPreviewing;
 
     [ObservableProperty] private bool _wordWrap;
+    [ObservableProperty] private bool _centeredLayout;
     [ObservableProperty] private bool _showLineNumbers;
     [ObservableProperty] private bool _showStatusBar;
 

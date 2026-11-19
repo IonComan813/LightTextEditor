@@ -37,8 +37,8 @@
         </Border>
       </ui:FATabView.TabStripHeader>
       <ui:FATabView.TabStripFooter>
-        <!-- 给系统标题栏按钮（最小化/最大化/关闭）留出位置，同时作为拖动区 -->
-        <Border x:Name="TabStripFooterDragArea" Background="Transparent" MinWidth="150" />
+        <!-- “+”右侧的空白：拖动区（标题栏按钮的位置由 TabView 的右边距留出，见 MainWindow 构造函数） -->
+        <Border x:Name="TabStripFooterDragArea" Background="Transparent" />
       </ui:FATabView.TabStripFooter>
     </ui:FATabView>
 
@@ -94,6 +94,9 @@
           <Separator />
           <MenuItem Header="自动换行(_W)" InputGesture="Alt+Z" ToggleType="CheckBox"
                     IsChecked="{Binding WordWrap, Mode=TwoWay}" />
+          <MenuItem Header="居中布局(_C)" ToggleType="CheckBox"
+                    IsChecked="{Binding CenteredLayout, Mode=TwoWay}"
+                    ToolTip.Tip="正文显示在窗口中间固定宽度的页面上（类似 Word）" />
           <MenuItem Header="行号(_L)" ToggleType="CheckBox"
                     IsChecked="{Binding ShowLineNumbers, Mode=TwoWay}" />
           <MenuItem Header="状态栏(_S)" ToggleType="CheckBox"
@@ -119,9 +122,9 @@
       <Panel x:Name="EditorHost" />
     </Border>
 
-    <!-- ③ 提示条（外部修改、编码不确定、已移动等）：浮在编辑区右上角，不挤占正文位置 -->
+    <!-- ③ 提示条（外部修改、编码不确定、已移动等）：浮在编辑区左上角，不挤占正文位置 -->
     <Border Grid.Row="3" x:Name="NoticeHost" IsVisible="False" ZIndex="10"
-            VerticalAlignment="Top" HorizontalAlignment="Right" MaxWidth="560" Margin="12,8,24,0"
+            VerticalAlignment="Top" HorizontalAlignment="Left" MaxWidth="560" Margin="16,8,24,0"
             Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
             CornerRadius="6" BoxShadow="0 4 14 0 #33000000">
       <ui:FAInfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" />

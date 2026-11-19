@@ -10,6 +10,7 @@
         <ResourceInclude Source="avares://LightTextEditor/Styles/WindowDecorations.axaml" />
         <ResourceInclude Source="avares://LightTextEditor/Styles/AppIcon.axaml" />
         <ResourceInclude Source="avares://LightTextEditor/Styles/MarkdownTheme.axaml" />
+        <ResourceInclude Source="avares://LightTextEditor/Styles/PageTheme.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

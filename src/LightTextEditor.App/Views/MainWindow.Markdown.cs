@@ -40,6 +40,7 @@ public partial class MainWindow
             double ratio = EditorScrollRatio(tab.Editor);
             tab.Preview ??= CreatePreview(tab);
             tab.Preview.Zoom = _vm.Zoom;
+            ApplyPageLayout(tab.Preview);
             tab.Preview.SetMarkdown(tab.Doc.Document.Text, DocumentDirectory(tab.Doc));
             tab.IsPreviewing = true;
             if (tab == _active)

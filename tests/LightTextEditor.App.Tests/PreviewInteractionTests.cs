@@ -138,4 +138,16 @@ public class PreviewInteractionTests
         Assert.False(block.IsCodeWrapped);
         Assert.True(text.Margin.Bottom >= wrappedBottom + 12);
     }
+
+    [AvaloniaFact]
+    public async Task ShortCodeBlockWithoutWrap_LeavesNoRoomForScrollBar()
+    {
+        var (window, tab) = await OpenPreviewAsync("```\nshort\n```\n");
+        var block = tab.Preview!.GetVisualDescendants().OfType<LiveMarkdown.Avalonia.CodeBlock>().Single();
+        var text = block.GetVisualDescendants().OfType<LiveMarkdown.Avalonia.MarkdownTextBlock>().First(t => t.Name == "PART_CodeTextBlock");
+        double bottom = text.Margin.Bottom;
+        block.IsCodeWrapped = false;
+        await Settle(3);
+        Assert.Equal(bottom, text.Margin.Bottom); // 放得下：没有滚动条，不留空
+    }
 }

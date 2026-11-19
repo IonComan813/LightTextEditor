@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private readonly System.Collections.ObjectModel.ObservableCollection<DocumentTab> _tabs = [];
     private DocumentTab? _active;
     internal DocumentTab? ActiveTab => _active;
+    internal MainViewModel ViewModel => _vm;
     private bool _closeConfirmed;
 
     private static AppSettings Settings => App.Settings;
@@ -35,6 +36,7 @@ public partial class MainWindow : Window
 
         _vm.WordWrap = Settings.WordWrap;
         _vm.ShowLineNumbers = Settings.ShowLineNumbers;
+        _vm.CenteredLayout = Settings.CenteredLayout;
         _vm.ShowStatusBar = Settings.ShowStatusBar;
         _vm.PropertyChanged += OnViewModelPropertyChanged;
 
@@ -42,11 +44,15 @@ public partial class MainWindow : Window
         WindowDecorationProperties.SetElementRole(TitleBarDragArea, WindowDecorationsElementRole.TitleBar);
         WindowDecorationProperties.SetElementRole(TabStripFooterDragArea, WindowDecorationsElementRole.TitleBar);
         WindowDecorationProperties.SetElementRole(TabStripLeftInset, WindowDecorationsElementRole.TitleBar);
+        // 给标题栏按钮（最小化/最大化/关闭，3×46）留出位置，再多留一点拖动窗口的空间。
+        // 用 TabView 的右边距而不是标签栏右侧的占位元素：FluentAvalonia 按占位元素“测量出的宽度”预留空间，
+        // 标签很多时那一列分不到宽度、测出来是 0，标签栏就伸到了最小化按钮下面。
+        // 右边距下面是 TitleBarDragArea，照样可以拖动窗口。
+        Tabs.Margin = new Thickness(0, 0, OperatingSystem.IsMacOS() ? 40 : 150, 0);
         if (OperatingSystem.IsMacOS())
         {
             // macOS 的红绿灯按钮在左侧
             TabStripLeftInset.Padding = new Thickness(76, 0, 8, 0);
-            TabStripFooterDragArea.MinWidth = 40;
         }
 
         // Windows：标签所在的标题栏区域按客户区处理，右键不弹系统窗口菜单（见 Services/TitleBarTabsHook.cs）
@@ -79,6 +85,13 @@ public partial class MainWindow : Window
         };
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        EditorArea.AddHandler(PointerWheelChangedEvent, OnEditorAreaWheel, RoutingStrategies.Bubble);
+        EditorHost.SizeChanged += (_, e) =>
+        {
+            if (!_vm.CenteredLayout || _active is null || e.WidthChanged == false) return;
+            ApplyPageLayout(_active.Editor);
+            if (_active.Preview is { } preview) ApplyPageLayout(preview);
+        };
         AddHandler(PointerMovedEvent, OnMenuPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
         AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
@@ -92,7 +105,11 @@ public partial class MainWindow : Window
                 ApplySelectionColors(t.Editor);
             }
         };
-        Opened += (_, _) => UpdateBackdrop();
+        Opened += (_, _) =>
+        {
+            UpdateBackdrop();
+            RefreshTabStripLayout();
+        };
         PropertyChanged += (_, e) =>
         {
             if (e.Property == ActualTransparencyLevelProperty) UpdateBackdrop();
@@ -335,6 +352,47 @@ public partial class MainWindow : Window
         UpdateNoticeBar();
         if (tab.IsPreviewing) tab.Preview?.Focus(); else FocusEditor();
         CheckExternalChanges(tab);
+    }
+
+    /// <summary>
+    /// 让 FluentAvalonia 重新计算标签栏的宽度和左右滚动按钮。
+    /// 它只在标签栏宽度变化、增删标签时计算，而且是在子元素测量之前算的：
+    /// 启动时一次恢复很多标签，用到的是还没量好的尺寸，结果标签栏伸到了最小化按钮下面、
+    /// 最左边的标签看不到、也没有滚动按钮。窗口显示后（尺寸都已确定）再算一次。
+    /// </summary>
+    private void RefreshTabStripLayout()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var mode = Tabs.TabWidthMode;
+            // 改变 TabWidthMode 会触发重新计算；改回原值再算一次
+            Tabs.TabWidthMode = mode == FATabViewWidthMode.Equal ? FATabViewWidthMode.SizeToContent : FATabViewWidthMode.Equal;
+            Tabs.TabWidthMode = mode;
+            if (_active?.Header is not null) _active.TabItem.BringIntoView();
+            // 标签放不下时两端的滚动按钮：实心三角形（自带的是很小的字体图标，模板里设的值样式改不了）
+            foreach (var button in Tabs.GetVisualDescendants().OfType<RepeatButton>())
+            {
+                bool left = button.Name == "ScrollDecreaseButton";
+                if (!left && button.Name != "ScrollIncreaseButton") continue;
+                var arrow = new Avalonia.Controls.Shapes.Path
+                {
+                    Data = Geometry.Parse(left ? "M7,0 L7,10 L0,5 Z" : "M0,0 L7,5 L0,10 Z"),
+                    Width = 7,
+                    Height = 10,
+                    Stretch = Stretch.Fill,
+                };
+                // 颜色跟随按钮模板里的 ContentPresenter（悬停、按下、不可用时它的前景色会变）
+                arrow.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new Avalonia.Data.Binding("Foreground")
+                {
+                    RelativeSource = new Avalonia.Data.RelativeSource(Avalonia.Data.RelativeSourceMode.FindAncestor)
+                    {
+                        AncestorType = typeof(Avalonia.Controls.Presenters.ContentPresenter),
+                    },
+                });
+                button.Content = arrow;
+                ToolTip.SetTip(button, left ? "向左滚动标签" : "向右滚动标签");
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     private void SelectRelative(int delta)
@@ -758,6 +816,54 @@ public partial class MainWindow : Window
             editor.ShowLineNumbers = _vm.ShowLineNumbers;
             StyleLineNumberMargin(editor);
         }
+        ApplyPageLayout(editor);
+        if (_active?.Editor == editor && _active.Preview is { } preview) ApplyPageLayout(preview);
+    }
+
+    // ───────────────────────── 居中布局 ─────────────────────────
+
+    /// <summary>
+    /// 居中布局：编辑器 / 预览变成窗口中间固定宽度的“页面”（宽度随缩放变化），两侧是颜色稍深的底色，类似 Word。
+    /// 不自动换行时，超出页面的长行在页面内横向滚动（滚动条在页面底部）。关闭时铺满窗口。
+    /// </summary>
+    private void ApplyPageLayout(Control view)
+    {
+        bool on = _vm.CenteredLayout;
+        // 页面宽度；窗口比页面窄时铺满（窗口大小变化时重新计算，见构造函数）
+        double pageWidth = Settings.CenteredLayoutWidth * _vm.Zoom;
+        double available = EditorHost.Bounds.Width;
+        view.Width = on ? (available > 0 ? Math.Min(pageWidth, available) : pageWidth) : double.NaN;
+        view.HorizontalAlignment = on ? Avalonia.Layout.HorizontalAlignment.Center : Avalonia.Layout.HorizontalAlignment.Stretch;
+        if (view is Avalonia.Controls.Primitives.TemplatedControl page)
+        {
+            if (on)
+            {
+                page[!BackgroundProperty] = this.GetResourceObservable("PageBackgroundBrush").ToBinding();
+                page[!BorderBrushProperty] = this.GetResourceObservable("PageBorderBrush").ToBinding();
+                page.BorderThickness = new Thickness(1, 0);
+            }
+            else
+            {
+                page.Background = Brushes.Transparent;
+                page.BorderThickness = default;
+            }
+        }
+        if (on) EditorArea[!Border.BackgroundProperty] = this.GetResourceObservable("PageDeskBrush").ToBinding();
+        else EditorArea.Background = null;
+    }
+
+    /// <summary>居中布局时，在页面两侧的空白处滚动鼠标滚轮也能滚动页面。</summary>
+    private void OnEditorAreaWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (e.Handled || _active is null || e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+        ScrollViewer? scroller = _active.IsPreviewing
+            ? _active.Preview
+            : _active.Editor.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault(); // 编辑器模板里的滚动区域
+        if (scroller is null) return;
+        const double step = 50;
+        double range = Math.Max(0, scroller.Extent.Height - scroller.Viewport.Height);
+        scroller.Offset = new Vector(scroller.Offset.X, Math.Clamp(scroller.Offset.Y - e.Delta.Y * step, 0, range));
+        e.Handled = true;
     }
 
     /// <summary>行号与正文之间不用分隔虚线，改为留白，更接近 Windows 11 记事本的观感。</summary>
@@ -804,6 +910,11 @@ public partial class MainWindow : Window
             case nameof(MainViewModel.WordWrap):
                 if (_active is not null) ApplyViewOptions(_active.Editor);
                 Settings.WordWrap = _vm.WordWrap;
+                App.SaveSettings();
+                break;
+            case nameof(MainViewModel.CenteredLayout):
+                if (_active is not null) ApplyViewOptions(_active.Editor);
+                Settings.CenteredLayout = _vm.CenteredLayout;
                 App.SaveSettings();
                 break;
             case nameof(MainViewModel.ShowLineNumbers):

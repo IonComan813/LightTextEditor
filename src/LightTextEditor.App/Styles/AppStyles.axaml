@@ -26,14 +26,14 @@
     <Setter Property="TextDecorations" Value="{DynamicResource MarkdownUnderline}" />
   </Style>
 
-  <!-- 代码块：按钮提示用中文；不自动换行时，横向滚动条浮在代码下方留出的空白上，不挡住最后一行 -->
+  <!-- 代码块：按钮提示用中文；代码超出宽度（出现横向滚动条）时，在代码下方给滚动条留出位置，不挡住最后一行 -->
   <Style Selector="md|CodeBlock /template/ ToggleButton#PART_ToggleTextWrapButton">
     <Setter Property="ToolTip.Tip" Value="自动换行" />
   </Style>
   <Style Selector="md|CodeBlock /template/ Button#PART_CopyButton">
     <Setter Property="ToolTip.Tip" Value="复制代码" />
   </Style>
-  <Style Selector="md|CodeBlock[IsCodeWrapped=False] /template/ md|MarkdownTextBlock#PART_CodeTextBlock">
+  <Style Selector="md|CodeBlock.hscroll /template/ md|MarkdownTextBlock#PART_CodeTextBlock">
     <Setter Property="Margin" Value="4,4,4,18" />
   </Style>
 
