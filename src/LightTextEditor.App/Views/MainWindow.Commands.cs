@@ -227,6 +227,8 @@ public partial class MainWindow
         ("Big5（繁体中文）", () => Legacy(950)),
         ("Shift-JIS（日文）", () => Legacy(932)),
         ("EUC-KR（韩文）", () => Legacy(949)),
+        ("EUC-JP（日文）", () => Legacy(51932)),
+        ("Windows-1251（西里尔文）", () => Legacy(1251)),
         ("Windows-1252（西欧）", () => Legacy(1252)),
         ("UTF-16 LE", () => new TextEncoding(new UnicodeEncoding(false, false), true, true)),
         ("UTF-16 BE", () => new TextEncoding(new UnicodeEncoding(true, false), true, true)),
@@ -252,7 +254,12 @@ public partial class MainWindow
         var reopen = new MenuItem { Header = "以其他编码重新打开", IsEnabled = doc.FilePath is not null };
         foreach (var (name, create) in ReopenEncodings)
         {
-            var item = new MenuItem { Header = name };
+            var item = new MenuItem
+            {
+                Header = name,
+                ToggleType = MenuItemToggleType.Radio,
+                IsChecked = create().CodePage == doc.Encoding.CodePage,
+            };
             item.Click += (_, _) => _ = ReopenWithEncodingAsync(doc, create());
             reopen.Items.Add(item);
         }
@@ -269,16 +276,19 @@ public partial class MainWindow
         if (!doc.Encoding.IsCertain)
         {
             var confirm = new MenuItem { Header = $"确认 {doc.Encoding.DisplayName} 显示正常" };
-            confirm.Click += (_, _) =>
-            {
-                doc.Encoding = doc.Encoding with { IsCertain = true };
-                doc.Notice = null;
-            };
+            confirm.Click += (_, _) => ConfirmEncoding(doc);
             flyout.Items.Add(confirm);
             flyout.Items.Add(new Separator());
         }
         flyout.Items.Add(reopen);
         flyout.Items.Add(saveWith);
+        if (!doc.Encoding.IsUtf8)
+        {
+            var convert = new MenuItem { Header = "转换为 UTF-8" };
+            convert.Click += (_, _) => _ = ConvertToUtf8Async(tab);
+            flyout.Items.Add(new Separator());
+            flyout.Items.Add(convert);
+        }
         flyout.ShowAt(anchor);
     }
 

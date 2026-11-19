@@ -23,6 +23,15 @@ public sealed partial class DocumentViewModel : ObservableObject
     [ObservableProperty]
     private TextEncoding _encoding;
 
+    /// <summary>
+    /// 打开 / 重新加载时的编码检测结果（保存后为 null）。
+    /// <see cref="EncodingDetection.IsLossless"/> 为 false 时，文件中有无法按当前编码识别的字节。
+    /// </summary>
+    public EncodingDetection? Detection { get; private set; }
+
+    /// <summary>文件中有无法按打开时的编码识别的字节（显示为 �），保存会改变它们。</summary>
+    public bool HasUndecodableBytes => Detection is { IsLossless: false };
+
     [ObservableProperty]
     private LineEnding _lineEnding;
 
@@ -76,6 +85,7 @@ public sealed partial class DocumentViewModel : ObservableObject
     {
         var doc = new DocumentViewModel(loaded.Text, Path.GetFullPath(path), loaded.Encoding, loaded.LineEnding, Path.GetExtension(path));
         doc.KnownWriteTimeUtc = TryGetWriteTime(path);
+        doc.Detection = loaded.Detection;
         return doc;
     }
 
@@ -131,39 +141,29 @@ public sealed partial class DocumentViewModel : ObservableObject
         FilePath = Path.GetFullPath(path);
         Encoding = enc with { IsCertain = true };
         KnownWriteTimeUtc = TryGetWriteTime(path);
+        Detection = null;
         _hasNonUndoableChanges = false;
         Document.UndoStack.MarkAsOriginalFile();
         RefreshDirty();
         Notice = null;
     }
 
-    /// <summary>从磁盘重新读取（可指定编码）。</summary>
-    public void Reload(TextEncoding? forcedEncoding = null)
+    /// <summary>
+    /// 从磁盘重新读取。<paramref name="forcedEncoding"/> 不为空时按该编码解码（"以其他编码重新打开"），
+    /// 否则重新检测编码（<paramref name="remembered"/> 为编码记录中的编码）。
+    /// </summary>
+    public void Reload(TextEncoding? forcedEncoding = null, TextEncoding? remembered = null)
     {
         if (FilePath is null) return;
-        string text;
-        TextEncoding enc;
-        LineEnding ending;
-        if (forcedEncoding is null)
-        {
-            var loaded = TextFileIO.Load(FilePath, LineEnding);
-            (text, enc, ending) = (loaded.Text, loaded.Encoding, loaded.LineEnding);
-        }
-        else
-        {
-            var bytes = File.ReadAllBytes(FilePath);
-            var bom = forcedEncoding.BomBytes;
-            bool hasBom = bom.Length > 0 && bytes.AsSpan().StartsWith(bom);
-            int skip = hasBom ? bom.Length : 0;
-            text = forcedEncoding.Encoding.GetString(bytes, skip, bytes.Length - skip);
-            enc = forcedEncoding with { HasBom = hasBom, IsCertain = true };
-            ending = LineEndings.Detect(text, LineEnding, out _);
-        }
+        var loaded = forcedEncoding is null
+            ? TextFileIO.Load(FilePath, LineEnding, remembered)
+            : TextFileIO.DecodeAs(File.ReadAllBytes(FilePath), forcedEncoding, LineEnding);
 
         // 用 Replace 而不是赋值 Text，保留撤销历史（可以撤销"重新加载"）。
-        Document.Replace(0, Document.TextLength, text);
-        Encoding = enc;
-        LineEnding = ending;
+        Document.Replace(0, Document.TextLength, loaded.Text);
+        Detection = loaded.Detection;
+        Encoding = loaded.Encoding;
+        LineEnding = loaded.LineEnding;
         KnownWriteTimeUtc = TryGetWriteTime(FilePath);
         _hasNonUndoableChanges = false;
         Document.UndoStack.MarkAsOriginalFile();
@@ -197,4 +197,10 @@ public enum NoticeSeverity { Informational, Success, Warning, Error }
 /// <summary>编辑区上方的提示条。</summary>
 public sealed record DocumentNotice(string Title, string Message, NoticeSeverity Severity, IReadOnlyList<NoticeAction> Actions);
 
-public sealed record NoticeAction(string Label, Action Execute);
+/// <summary>提示条上的按钮。有 <see cref="Children"/> 时显示为下拉按钮（<see cref="Execute"/> 不使用）。</summary>
+public sealed record NoticeAction(string Label, Action Execute)
+{
+    public IReadOnlyList<NoticeAction>? Children { get; init; }
+
+    public bool IsChecked { get; init; }
+}

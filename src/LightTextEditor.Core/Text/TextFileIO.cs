@@ -3,7 +3,10 @@ using System.Text;
 namespace LightTextEditor.Core.Text;
 
 /// <summary>从磁盘读取的文本及其格式信息。</summary>
-public sealed record LoadedText(string Text, TextEncoding Encoding, LineEnding LineEnding, bool HasMixedLineEndings, bool LooksBinary);
+public sealed record LoadedText(string Text, EncodingDetection Detection, LineEnding LineEnding, bool HasMixedLineEndings, bool LooksBinary)
+{
+    public TextEncoding Encoding => Detection.Encoding;
+}
 
 /// <summary>保存时目标编码无法无损表示某个字符。</summary>
 public sealed class EncodingLossException(TextEncoding encoding, char character, int index)
@@ -18,63 +21,47 @@ public sealed class EncodingLossException(TextEncoding encoding, char character,
 public static class TextFileIO
 {
     /// <summary>读取文件并识别编码与换行符。</summary>
-    public static LoadedText Load(string path, LineEnding defaultLineEnding = LineEnding.CrLf)
+    /// <param name="remembered">编码记录中该文件已确认的编码（见 <see cref="EncodingMemory"/>）。</param>
+    /// <param name="useEditorConfig">是否参考文件所在目录的 <c>.editorconfig</c>。</param>
+    public static LoadedText Load(string path, LineEnding defaultLineEnding = LineEnding.CrLf,
+        TextEncoding? remembered = null, bool useEditorConfig = true)
     {
         var bytes = File.ReadAllBytes(path);
-        return Decode(bytes, defaultLineEnding);
+        var charset = useEditorConfig ? EditorConfig.GetCharset(path) : null;
+        return Decode(bytes, defaultLineEnding, remembered, charset);
     }
 
-    /// <summary>
-    /// 识别顺序：BOM → 严格 UTF-8 校验 → 回退为 GB18030（标记为"不确定"）。
-    /// （统计猜测将在 M3 加入。）
-    /// </summary>
-    public static LoadedText Decode(byte[] bytes, LineEnding defaultLineEnding = LineEnding.CrLf)
+    /// <summary>识别编码（见 <see cref="EncodingDetector"/>）并解码。</summary>
+    public static LoadedText Decode(byte[] bytes, LineEnding defaultLineEnding = LineEnding.CrLf,
+        TextEncoding? remembered = null, string? editorConfigCharset = null)
     {
-        TextEncoding.EnsureCodePagesRegistered();
+        var detection = EncodingDetector.Detect(bytes, remembered, editorConfigCharset);
+        return Decode(bytes, detection, defaultLineEnding);
+    }
 
-        var (encoding, bomLength) = DetectBom(bytes);
-        string text;
-        bool looksBinary;
+    /// <summary>按指定编码解码（"以其他编码重新打开"）。文件开头有该编码的 BOM 时跳过 BOM。</summary>
+    public static LoadedText DecodeAs(byte[] bytes, TextEncoding encoding, LineEnding defaultLineEnding = LineEnding.CrLf)
+    {
+        var bom = encoding.BomBytes;
+        bool hasBom = bom.Length > 0 && bytes.AsSpan().StartsWith(bom);
+        var enc = encoding with { HasBom = hasBom, IsCertain = true };
+        return Decode(bytes, new EncodingDetection(enc, DetectionMethod.Remembered, 1, EncodingDetector.RoundTrips(bytes, enc)), defaultLineEnding);
+    }
 
-        if (encoding is not null)
-        {
-            text = encoding.Encoding.GetString(bytes, bomLength, bytes.Length - bomLength);
-            looksBinary = !encoding.IsUnicode && ContainsNul(bytes);
-        }
-        else
-        {
-            looksBinary = ContainsNul(bytes);
-            var strictUtf8 = new UTF8Encoding(false, true);
-            try
-            {
-                text = strictUtf8.GetString(bytes);
-                encoding = TextEncoding.Utf8(withBom: false);
-            }
-            catch (DecoderFallbackException)
-            {
-                encoding = TextEncoding.Gb18030(isCertain: false);
-                text = encoding.Encoding.GetString(bytes);
-            }
-        }
+    private static LoadedText Decode(byte[] bytes, EncodingDetection detection, LineEnding defaultLineEnding)
+    {
+        var encoding = detection.Encoding;
+        int skip = encoding.HasBom && bytes.AsSpan().StartsWith(encoding.BomBytes) ? encoding.BomBytes.Length : 0;
 
+        // 解码时不抛异常：无法识别的字节显示为替换字符（是否有损见 Detection.IsLossless）
+        var lenient = (Encoding)encoding.Encoding.Clone();
+        lenient.DecoderFallback = new DecoderReplacementFallback("\uFFFD");
+        var text = lenient.GetString(bytes, skip, bytes.Length - skip);
+
+        // UTF-16/32 本来就有大量 0x00，不算二进制
+        bool looksBinary = (!encoding.IsUnicode || encoding.IsUtf8) && ContainsNul(bytes);
         var ending = LineEndings.Detect(text, defaultLineEnding, out bool mixed);
-        return new LoadedText(text, encoding, ending, mixed, looksBinary);
-    }
-
-    private static (TextEncoding? Encoding, int BomLength) DetectBom(byte[] b)
-    {
-        // UTF-32 LE 必须在 UTF-16 LE 之前判断（前两个字节相同）。
-        if (b.Length >= 4 && b[0] == 0xFF && b[1] == 0xFE && b[2] == 0x00 && b[3] == 0x00)
-            return (new TextEncoding(new UTF32Encoding(false, false), true, true), 4);
-        if (b.Length >= 4 && b[0] == 0x00 && b[1] == 0x00 && b[2] == 0xFE && b[3] == 0xFF)
-            return (new TextEncoding(new UTF32Encoding(true, false), true, true), 4);
-        if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF)
-            return (TextEncoding.Utf8(withBom: true), 3);
-        if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE)
-            return (new TextEncoding(new UnicodeEncoding(false, false), true, true), 2);
-        if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF)
-            return (new TextEncoding(new UnicodeEncoding(true, false), true, true), 2);
-        return (null, 0);
+        return new LoadedText(text, detection, ending, mixed, looksBinary);
     }
 
     private static bool ContainsNul(byte[] bytes)

@@ -213,12 +213,18 @@ LightTextEditor.sln
 
 > **到这里就是一个可日常使用的 MVP（约 5~8 周）。** ✅ M2 已完成（待 Windows 实机验证）
 
-### M3 · 编码检测（1~2 周）
+### M3 · 编码检测（1~2 周）✅ 已完成
 
-- [ ] BOM → 元数据/editorconfig → 严格 UTF-8 → UTF-16 启发式 → UTF.Unknown 检测管线
-- [ ] "待确认"InfoBar、以其他编码重新打开、转换为 UTF-8
+- [x] BOM → 编码记录 / `.editorconfig` → 无 BOM 的 UTF-16 → 严格 UTF-8 → UTF.Unknown 统计检测 → 中文双字节结构推测 → 回退 GB18030
+  - 无 BOM 的 UTF-16 放在 UTF-8 之前判断：以 ASCII 为主的 UTF-16 文本同时也是"合法的 UTF-8"
+  - 统计检测置信度 ≥ 90% 视为确定；短文本上 UTF.Unknown 不可靠（如 4 字节的 GBK"中文"会被认成 KOI8-R），此时按 GB2312 / Big5 的字节结构推测，仍标记为"待确认"
+  - 编码记录暂存在配置目录的 `encodings.json`（路径 → 代码页），M4 引入元数据库后迁移；文件被别的程序转成 UTF-8 后记录自动失效
+- [x] "请确认编码"提示条：检测为 X（置信度 N%）[显示正常] [换一个编码▾] [转换为 UTF-8]；确认 / 换编码 / 以某编码保存都会记入编码记录
+- [x] 无法识别的字节（解码再编码得不到原字节）：提示条警告，保存前确认，不允许直接"转换为 UTF-8"
+- [x] 新文件遵循 `.editorconfig` 的 `charset`（utf-8 / utf-8-bom / latin1 / utf-16le / utf-16be）
 - [x] 无损保护：无法无损编码时提示改用 UTF-8（M1 已完成）
-- [ ] 准备一组 GBK/Big5/Shift-JIS/UTF-16/短文本测试样本，写单元测试
+- [x] 测试样本：GBK / Big5 / Shift-JIS / EUC-KR / Windows-1251/1252 / 无 BOM 的 UTF-16 / 短文本 / 编码记录 / `.editorconfig`
+- [ ] "转换为 UTF-8"前先存历史快照：等 M5 版本历史
 
 ### M4 · 近期文件与全文搜索（1~2 周）
 

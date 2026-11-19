@@ -22,9 +22,65 @@ public sealed record TextEncoding(Encoding Encoding, bool HasBom, bool IsCertain
     public static TextEncoding Gb18030(bool isCertain) =>
         new(Encoding.GetEncoding(54936), false, isCertain);
 
+    /// <summary>
+    /// 按代码页创建编码。Unicode 编码不抛出解码异常（无效字节显示为 U+FFFD），
+    /// 是否带 BOM 由 <paramref name="hasBom"/> 决定。
+    /// </summary>
+    public static TextEncoding FromCodePage(int codePage, bool hasBom = false, bool isCertain = true)
+    {
+        EnsureCodePagesRegistered();
+        Encoding encoding = codePage switch
+        {
+            65001 => new UTF8Encoding(false, true),
+            1200 => new UnicodeEncoding(false, false),
+            1201 => new UnicodeEncoding(true, false),
+            12000 => new UTF32Encoding(false, false),
+            12001 => new UTF32Encoding(true, false),
+            _ => Encoding.GetEncoding(codePage),
+        };
+        return new TextEncoding(encoding, hasBom && IsUnicodeCodePage(codePage), isCertain);
+    }
+
+    /// <summary>
+    /// 把编码名（如 "gbk"、"shift_jis"、"euc-kr"，来自统计检测或 .editorconfig）转换为编码。
+    /// 简体中文统一用 GB18030（GBK / GB2312 的超集），韩文用 CP949（EUC-KR 的超集）。不认识时返回 null。
+    /// </summary>
+    public static TextEncoding? FromName(string name, bool isCertain = true)
+    {
+        EnsureCodePagesRegistered();
+        int? codePage = name.Trim().ToLowerInvariant() switch
+        {
+            "utf-8" or "utf8" or "ascii" or "us-ascii" => 65001,
+            "gb18030" or "gbk" or "gb2312" or "cp936" or "x-gbk" => 54936,
+            "big5" or "big5-hkscs" or "cp950" => 950,
+            "shift-jis" or "shift_jis" or "sjis" or "cp932" or "windows-31j" => 932,
+            "euc-kr" or "cp949" or "ks_c_5601-1987" => 949,
+            "euc-jp" => 51932,
+            "utf-16le" or "utf-16" => 1200,
+            "utf-16be" => 1201,
+            "utf-32le" or "utf-32" => 12000,
+            "utf-32be" => 12001,
+            "latin1" or "iso-8859-1" => 28591,
+            _ => null,
+        };
+        if (codePage is { } cp) return FromCodePage(cp, isCertain: isCertain);
+        try
+        {
+            return new TextEncoding(Encoding.GetEncoding(name), false, isCertain);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsUnicodeCodePage(int codePage) => codePage is 65001 or 1200 or 1201 or 12000 or 12001;
+
     public int CodePage => Encoding.CodePage;
 
-    public bool IsUnicode => CodePage is 65001 or 1200 or 1201 or 12000 or 12001;
+    public bool IsUnicode => IsUnicodeCodePage(CodePage);
+
+    public bool IsUtf8 => CodePage == 65001;
 
     /// <summary>状态栏上显示的名称，如 "UTF-8"、"UTF-8 with BOM"、"GB18030"。</summary>
     public string DisplayName
@@ -42,11 +98,39 @@ public sealed record TextEncoding(Encoding Encoding, bool HasBom, bool IsCertain
                 936 => "GBK",
                 950 => "Big5",
                 932 => "Shift-JIS",
+                949 or 51949 => "EUC-KR",
+                51932 => "EUC-JP",
+                20866 => "KOI8-R",
+                28591 => "ISO-8859-1",
+                >= 1250 and <= 1258 => "Windows-" + CodePage,
                 _ => Encoding.WebName.ToUpperInvariant(),
             };
             return HasBom && CodePage == 65001 ? name + " with BOM" : name;
         }
     }
+
+    /// <summary>编码适用的语言（"简体中文"、"日文"……），用于提示；没有时为 null。</summary>
+    public string? LanguageHint => CodePage switch
+    {
+        54936 or 936 => "简体中文",
+        950 => "繁体中文",
+        932 or 51932 => "日文",
+        949 or 51949 => "韩文",
+        1250 => "中欧",
+        1251 or 20866 => "西里尔文",
+        1252 or 28591 => "西欧",
+        1253 => "希腊文",
+        1254 => "土耳其文",
+        1255 => "希伯来文",
+        1256 => "阿拉伯文",
+        1257 => "波罗的海",
+        1258 => "越南文",
+        874 => "泰文",
+        _ => null,
+    };
+
+    /// <summary>带语言说明的名称，如 "GB18030（简体中文）"。</summary>
+    public string Description => LanguageHint is { } hint ? $"{DisplayName}（{hint}）" : DisplayName;
 
     /// <summary>该编码对应的 BOM 字节（不论 <see cref="HasBom"/> 是否为真）。</summary>
     public byte[] BomBytes => CodePage switch

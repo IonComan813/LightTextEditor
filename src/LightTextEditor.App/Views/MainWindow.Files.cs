@@ -22,6 +22,19 @@ public partial class MainWindow
         return AddTab(doc);
     }
 
+    /// <summary>
+    /// 新文件 / 改用 UTF-8 时的 UTF-8 形式：<c>.editorconfig</c> 指定了 utf-8 或 utf-8-bom 时按它，
+    /// 否则 .txt/.md 带 BOM、代码文件不带（见设置）。
+    /// </summary>
+    private static TextEncoding PreferredUtf8(string path) =>
+        EditorConfig.GetEncoding(path) is { IsUtf8: true } configured
+            ? configured
+            : TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path)));
+
+    /// <summary>新文件保存时使用的编码：<c>.editorconfig</c> 的 charset 优先，否则为 <see cref="PreferredUtf8"/>。</summary>
+    private static TextEncoding DefaultEncodingFor(string path) =>
+        EditorConfig.GetEncoding(path) ?? PreferredUtf8(path);
+
     private DocumentTab? FindTab(string path)
     {
         var full = Path.GetFullPath(path);
@@ -88,7 +101,7 @@ public partial class MainWindow
                     $"“{info.Name}”有 {info.Length / 1024 / 1024} MB，打开可能较慢。仍要打开吗？", "打开"))
                 return null;
 
-            var loaded = TextFileIO.Load(path, Settings.NewFileLineEnding);
+            var loaded = TextFileIO.Load(path, Settings.NewFileLineEnding, App.EncodingMemory.Get(path));
             if (loaded.LooksBinary &&
                 !await Dialogs.ConfirmAsync(this, "可能不是文本文件",
                     $"“{info.Name}”看起来是二进制文件，以文本方式打开并保存可能会损坏它。仍要打开吗？", "打开"))
@@ -114,7 +127,7 @@ public partial class MainWindow
             path = LibraryShortcuts.ResolveForOpening(path);
             if (FindTab(path) is { } existing) return existing;
             if (new FileInfo(path).Length > LargeFileThreshold) return null;
-            var loaded = TextFileIO.Load(path, Settings.NewFileLineEnding);
+            var loaded = TextFileIO.Load(path, Settings.NewFileLineEnding, App.EncodingMemory.Get(path));
             return loaded.LooksBinary ? null : AddLoadedDocument(path, loaded, select: false);
         }
         catch (Exception)
@@ -126,28 +139,58 @@ public partial class MainWindow
     private DocumentTab AddLoadedDocument(string path, LoadedText loaded, bool select = true)
     {
         var doc = DocumentViewModel.FromFile(path, loaded);
-        if (!loaded.Encoding.IsCertain) doc.Notice = UncertainEncodingNotice(doc);
-        else if (loaded.HasMixedLineEndings)
+        var tab = AddTab(doc, select); // 总是在新标签页中打开（当前的空白标签页保留）
+        doc.Notice = EncodingNotice(tab);
+        if (doc.Notice is null && loaded.HasMixedLineEndings)
             doc.Notice = new DocumentNotice("换行符不一致",
                 $"此文件混用了多种换行符，主要为 {loaded.LineEnding.DisplayName()}。可在状态栏统一。",
                 NoticeSeverity.Informational, []);
-
-        // 总是在新标签页中打开（当前的空白标签页保留）
-        return AddTab(doc, select);
+        return tab;
     }
 
-    private DocumentNotice UncertainEncodingNotice(DocumentViewModel doc) => new(
-        "无法确定编码",
-        $"已按 {doc.Encoding.DisplayName} 打开。如果显示乱码，请在状态栏右下角选择其他编码重新打开。",
-        NoticeSeverity.Warning,
-        [
-            new NoticeAction("显示正常，确认此编码", () =>
+    /// <summary>
+    /// 编码"待确认"或有无法识别的字节时的提示条：[显示正常] [换一个编码▾] [转换为 UTF-8]。不需要提示时返回 null。
+    /// </summary>
+    private DocumentNotice? EncodingNotice(DocumentTab tab)
+    {
+        var doc = tab.Doc;
+        var detection = doc.Detection;
+        bool uncertain = !doc.Encoding.IsCertain;
+        if (!uncertain && !doc.HasUndecodableBytes) return null;
+
+        var enc = doc.Encoding.Description;
+        string message = !uncertain
+            ? $"有部分字节无法按 {enc} 识别（显示为 �），按此编码保存会改变它们。可以换一个编码重新打开。"
+            : detection?.Method switch
             {
-                doc.Encoding = doc.Encoding with { IsCertain = true };
-                doc.Notice = null;
-            }),
-            new NoticeAction("以 UTF-8 重新打开", () => _ = ReopenWithEncodingAsync(doc, TextEncoding.Utf8(false))),
-        ]);
+                DetectionMethod.Statistical when detection.ConfidenceText is { } c => $"检测为 {enc}（置信度 {c}），显示是否正常？",
+                DetectionMethod.CjkHeuristic => $"推测为 {enc}，显示是否正常？",
+                _ => $"无法判断编码，已按 {enc} 打开。显示是否正常？",
+            } + (doc.HasUndecodableBytes ? "\n有部分字节无法按此编码识别（显示为 �）。" : "");
+
+        var actions = new List<NoticeAction>();
+        if (uncertain && !doc.HasUndecodableBytes)
+            actions.Add(new NoticeAction("显示正常", () => ConfirmEncoding(doc)));
+        actions.Add(new NoticeAction("换一个编码", () => { })
+        {
+            Children = [.. ReopenEncodings.Select(e => new NoticeAction(e.Name, () => _ = ReopenWithEncodingAsync(doc, e.Create()))
+            {
+                IsChecked = e.Create().CodePage == doc.Encoding.CodePage,
+            })],
+        });
+        if (!doc.HasUndecodableBytes)
+            actions.Add(new NoticeAction("转换为 UTF-8", () => _ = ConvertToUtf8Async(tab)));
+
+        return new DocumentNotice(uncertain ? "请确认编码" : "有无法识别的字节", message, NoticeSeverity.Warning, actions);
+    }
+
+    /// <summary>用户确认当前编码显示正常：记入编码记录，下次直接使用，不改动文件。</summary>
+    private static void ConfirmEncoding(DocumentViewModel doc)
+    {
+        doc.Encoding = doc.Encoding with { IsCertain = true };
+        if (doc.FilePath is { } path) App.EncodingMemory.Remember(path, doc.Encoding);
+        doc.Notice = null;
+    }
 
     // ───────────────────────── 保存 ─────────────────────────
 
@@ -190,9 +233,7 @@ public partial class MainWindow
     internal async Task<bool> SaveAsToAsync(DocumentTab tab, string path)
     {
         var doc = tab.Doc;
-        var encoding = doc.IsUntitled
-            ? TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path)))
-            : doc.Encoding;
+        var encoding = doc.IsUntitled ? DefaultEncodingFor(path) : doc.Encoding;
         if (!await WriteAsync(doc, path, encoding)) return false;
         if (LibraryShortcuts.Ensure(LibraryPath, path) is not null)
             ShowTransientNotice(doc, new DocumentNotice("已另存为",
@@ -237,15 +278,22 @@ public partial class MainWindow
             await Dialogs.ShowErrorAsync(this, "无法保存", $"已存在同名文件：{fileName}");
             return false;
         }
-        return await WriteAsync(doc, path, TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path))));
+        return await WriteAsync(doc, path, DefaultEncodingFor(path));
     }
 
     /// <summary>写入磁盘并处理错误（编码无法表示的字符、权限、磁盘错误）。</summary>
-    private async Task<bool> WriteAsync(DocumentViewModel doc, string path, TextEncoding encoding)
+    private async Task<bool> WriteAsync(DocumentViewModel doc, string path, TextEncoding encoding, bool undecodableConfirmed = false)
     {
+        if (doc.HasUndecodableBytes && !undecodableConfirmed && !await Dialogs.ConfirmAsync(this, "有无法识别的字节",
+                $"“{doc.Title}”中有部分字节无法按 {doc.Detection!.Encoding.DisplayName} 识别（显示为 �）。" +
+                "保存后它们会被替换，原来的内容无法恢复。\n\n建议先在状态栏换一个编码重新打开。", "仍然保存"))
+            return false;
         try
         {
             doc.SaveTo(path, encoding);
+            // 编码记录：UTF-8 / 带 BOM 的文件能自我识别，不需要；其他编码记下来，下次打开不必再猜
+            if (doc.Encoding.IsUnicode) App.EncodingMemory.Forget(path);
+            else App.EncodingMemory.Remember(path, doc.Encoding);
             return true;
         }
         catch (EncodingLossException ex)
@@ -254,7 +302,7 @@ public partial class MainWindow
                     $"{ex.TargetEncoding.DisplayName} 编码无法保存字符“{ex.Character}”。\n\n" +
                     "改用 UTF-8 保存可以保留所有字符（推荐）。", "改用 UTF-8 保存"))
                 return false;
-            return await WriteAsync(doc, path, TextEncoding.Utf8(Settings.ShouldWriteBom(Path.GetExtension(path))));
+            return await WriteAsync(doc, path, PreferredUtf8(path), undecodableConfirmed: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -360,7 +408,7 @@ public partial class MainWindow
         }
         if (!await MoveFileAsync(tab, newPath)) return;
 
-        bool wantBom = Settings.ShouldWriteBom(extension);
+        bool wantBom = PreferredUtf8(newPath).HasBom;
         if (doc.Encoding.CodePage == 65001 && doc.Encoding.HasBom != wantBom)
         {
             bool wasDirty = doc.IsDirty;
@@ -379,6 +427,7 @@ public partial class MainWindow
             var oldPath = doc.FilePath;
             File.Move(oldPath, newPath);
             doc.UpdatePath(newPath);
+            App.EncodingMemory.Move(oldPath, newPath);
             // 外部文件改名后，笔记库里的快捷方式也跟着换
             if (!LibraryShortcuts.IsInsideLibrary(LibraryPath, oldPath))
             {
@@ -437,6 +486,7 @@ public partial class MainWindow
             return false;
         }
         doc.UpdatePath(target);
+        App.EncodingMemory.Move(oldPath, target);
         LibraryShortcuts.Remove(LibraryPath, oldPath);
 
         var failed = MarkdownImageMigration.Execute(images);
@@ -533,7 +583,7 @@ public partial class MainWindow
             if (!doc.IsDirty)
             {
                 int caret = tab.Editor.CaretOffset;
-                try { doc.Reload(); }
+                try { doc.Reload(remembered: App.EncodingMemory.Get(path)); }
                 catch (Exception) { continue; }
                 tab.Editor.CaretOffset = Math.Min(caret, doc.Document.TextLength);
                 ShowTransientNotice(doc, new DocumentNotice("已重新加载", "文件已被其他程序修改，已载入最新内容（可按 Ctrl+Z 撤销）。",
@@ -549,7 +599,7 @@ public partial class MainWindow
                     [
                         new NoticeAction("载入磁盘上的版本", () =>
                         {
-                            try { doc.Reload(); doc.Notice = null; }
+                            try { doc.Reload(remembered: App.EncodingMemory.Get(path)); doc.Notice = EncodingNotice(tab); }
                             catch (Exception e) { _ = Dialogs.ShowErrorAsync(this, "无法重新加载", e.Message); }
                         }),
                         new NoticeAction("保留我的版本", () =>
@@ -573,7 +623,9 @@ public partial class MainWindow
         try
         {
             doc.Reload(encoding);
-            doc.Notice = null;
+            // 用户明确选择的编码：记下来，下次打开直接使用
+            App.EncodingMemory.Remember(doc.FilePath, doc.Encoding);
+            doc.Notice = FindTabByDocument(doc) is { } tab ? EncodingNotice(tab) : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -581,12 +633,40 @@ public partial class MainWindow
         }
     }
 
-    private async Task SaveWithEncodingAsync(DocumentTab tab, TextEncoding encoding)
+    private DocumentTab? FindTabByDocument(DocumentViewModel doc) => AllTabs().FirstOrDefault(t => t.Doc == doc);
+
+    private async Task<bool> SaveWithEncodingAsync(DocumentTab tab, TextEncoding encoding)
     {
         var old = tab.Doc.Encoding;
         tab.Doc.ChangeEncoding(encoding);
-        if (!await SaveAsync(tab))
-            tab.Doc.Encoding = old; // 保存失败或取消：恢复原编码显示
+        if (await SaveAsync(tab)) return true;
+        tab.Doc.Encoding = old; // 保存失败或取消：恢复原编码显示
+        return false;
+    }
+
+    /// <summary>
+    /// 把文件转换为 UTF-8：按当前编码的解读重新以 UTF-8 写入（.txt/.md 带 BOM，代码文件不带；
+    /// <c>.editorconfig</c> 指定时按它）。转换后不再需要编码记录。
+    /// </summary>
+    internal async Task<bool> ConvertToUtf8Async(DocumentTab tab)
+    {
+        var doc = tab.Doc;
+        if (doc.FilePath is not { } path)
+        {
+            doc.ChangeEncoding(TextEncoding.Utf8(Settings.ShouldWriteBom(doc.Extension)));
+            return true;
+        }
+        if (doc.HasUndecodableBytes)
+        {
+            await Dialogs.ShowErrorAsync(this, "无法转换",
+                $"有部分字节无法按 {doc.Encoding.DisplayName} 识别，转换后它们会永久丢失。请先换一个编码重新打开。");
+            return false;
+        }
+        if (!doc.Encoding.IsCertain && !await Dialogs.ConfirmAsync(this, "转换为 UTF-8",
+                $"将按 {doc.Encoding.Description} 的解读把“{doc.Title}”转换为 UTF-8 并保存。\n\n" +
+                "请先确认内容显示正常：如果现在是乱码，转换后就无法再恢复原文。", "转换"))
+            return false;
+        return await SaveWithEncodingAsync(tab, PreferredUtf8(path));
     }
 
     // ───────────────────────── 拖放 ─────────────────────────

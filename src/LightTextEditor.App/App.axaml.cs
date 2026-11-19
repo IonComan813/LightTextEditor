@@ -17,6 +17,9 @@ public partial class App : Application
 
     public static AppSettings Settings { get; internal set; } = new();
 
+    /// <summary>用户确认过的文件编码（下次打开时直接使用）。</summary>
+    public static EncodingMemory EncodingMemory { get; internal set; } = new(storePath: null);
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -29,6 +32,7 @@ public partial class App : Application
         MarkdownHtmlInlines.Register();
         Fonts.Register(this);
         Settings = JsonStore.LoadSettings();
+        EncodingMemory = new EncodingMemory(Core.AppPaths.EncodingMemoryFile);
         ApplyTheme(Settings.Theme);
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

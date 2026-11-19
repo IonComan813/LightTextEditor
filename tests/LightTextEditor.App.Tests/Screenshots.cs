@@ -66,4 +66,37 @@ public class Screenshots
 
         // 不关闭窗口：有未保存的标签页时 Close() 会弹出确认对话框
     }
+
+    [AvaloniaTheory]
+    [InlineData("light")]
+    [InlineData("dark")]
+    public async Task EncodingNotice(string theme)
+    {
+        var dir = Environment.GetEnvironmentVariable("LTE_SCREENSHOT_DIR");
+        if (string.IsNullOrEmpty(dir)) return;
+        Directory.CreateDirectory(dir);
+
+        Avalonia.Application.Current!.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        var library = Path.Combine(TestAppBuilder.Root, "shots-enc-" + theme);
+        Directory.CreateDirectory(library);
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+
+        Core.Text.TextEncoding.EnsureCodePagesRegistered();
+        var path = Path.Combine(library, "旧笔记.txt");
+        File.WriteAllBytes(path, System.Text.Encoding.GetEncoding(1251).GetBytes("Привет, мир! Это тест кодировки.\r\nВторая строка."));
+
+        var window = new MainWindow { Width = 1000, Height = 560 };
+        window.Initialize([]);
+        window.Show();
+        await window.OpenFilesAsync([path]);
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-notice-{theme}.png"));
+
+        // 展开"换一个编码"
+        var dropDown = window.GetVisualDescendants().OfType<Avalonia.Controls.DropDownButton>().First();
+        dropDown.Flyout!.ShowAt(dropDown);
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-choices-{theme}.png"));
+        dropDown.Flyout.Hide();
+    }
 }

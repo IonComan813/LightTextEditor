@@ -6,7 +6,10 @@
 - **保存到笔记库不用选位置**：新文档第一次保存时只确认文件名和后缀（默认取首行文字或时间 + `.txt`），都可修改
 - 状态栏或“文件 → 更改后缀”可以把文件直接转换为其他后缀（如 `.md`、`.py`）
 - 手动保存；有未保存更改时标签上显示 ●，鼠标移上去变成 ×
-- 读取时识别编码（BOM → 严格 UTF-8 → 回退 GB18030 并提示确认），保存前检查编码能否无损保存
+- 读取时识别编码：BOM → 记住的编码 / `.editorconfig` → 无 BOM 的 UTF-16 → UTF-8 → 统计检测（GBK、Big5、Shift-JIS、EUC-KR 等）
+  - 拿不准时顶部提示“请确认编码”：[显示正常]（记住，下次直接用）[换一个编码▾] [转换为 UTF-8]
+  - 保存时保持原编码，绝不静默转码；有无法识别的字节、或编码无法表示新输入的字符时先提示
+  - 新文件遵循 `.editorconfig` 的 `charset`
 - 代码语法高亮（VS Code 的 TextMate 语法和 Light+ / Dark+ 配色），按后缀自动选择语言
 - Markdown：`Ctrl+E` 在源码和渲染预览之间切换；`Ctrl+V` 粘贴截图或图片文件、拖入图片，自动存到 `assets/` 并插入 `![]()`
   - 预览支持 GFM 表格 / 任务列表、提示框（`> [!NOTE]`）、代码高亮、LaTeX 公式（`$…$` / `$$…$$`）、Mermaid 图表，以及 `<u>`、`<sub>`、`<sup>`、`<mark>`、`<br>` 等常用行内 HTML
@@ -35,7 +38,7 @@ dotnet test
 
 | 路径 | 内容 |
 |------|------|
-| `src/LightTextEditor.Core` | 与界面无关的逻辑：编码识别、原子写入、文件命名、设置 |
+| `src/LightTextEditor.Core` | 与界面无关的逻辑：编码识别（`Text/EncodingDetector.cs`）、原子写入、文件命名、设置 |
 | `src/LightTextEditor.App` | Avalonia 界面 |
 | `tests/LightTextEditor.Core.Tests` | Core 单元测试 |
 | `tests/LightTextEditor.App.Tests` | 无头（headless）界面测试；设置环境变量 `LTE_SCREENSHOT_DIR` 可输出截图 |
@@ -63,4 +66,4 @@ dotnet test
 ## 文件位置
 
 - 笔记库：默认 `文档\LightTextEditor`，可在“文件 → 更改笔记库位置”修改
-- 设置与会话：`%AppData%\LightTextEditor`（可用环境变量 `LIGHTTEXTEDITOR_CONFIG_DIR` 覆盖）
+- 设置、会话与编码记录（`encodings.json`）：`%AppData%\LightTextEditor`（可用环境变量 `LIGHTTEXTEDITOR_CONFIG_DIR` 覆盖）
