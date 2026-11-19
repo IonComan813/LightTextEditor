@@ -9,7 +9,6 @@
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://LightTextEditor/Styles/WindowDecorations.axaml" />
         <ResourceInclude Source="avares://LightTextEditor/Styles/AppIcon.axaml" />
-        <ResourceInclude Source="avares://LightTextEditor/Styles/MarkdownTheme.axaml" />
         <ResourceInclude Source="avares://LightTextEditor/Styles/PageTheme.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
@@ -17,8 +16,7 @@
   <Application.Styles>
     <sty:FluentAvaloniaTheme PreferSystemTheme="True" PreferUserAccentColor="True" UseSystemFontOnWindows="True" />
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
-    <StyleInclude Source="avares://LiveMarkdown.Avalonia/Styles.axaml" />
-    <StyleInclude Source="avares://LiveMarkdown.Avalonia.Mermaid/Styles.axaml" />
+    <!-- Markdown 预览的样式和资源在第一次打开预览时加载，见 App.EnsureMarkdownResources -->
     <StyleInclude Source="avares://LightTextEditor/Styles/AppStyles.axaml" />
   </Application.Styles>
 </Application>

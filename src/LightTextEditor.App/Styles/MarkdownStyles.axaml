@@ -1,0 +1,116 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+        xmlns:ratex="clr-namespace:RaTeX.Avalonia;assembly=RaTeX.Avalonia">
+
+  <!--
+    Markdown 预览（LiveMarkdown.Avalonia）的样式。
+    不在启动时加载：第一次打开预览时由 App.EnsureMarkdownResources 加入（连同库自带的样式和 MarkdownTheme.axaml），
+    只编辑纯文本 / 代码时不加载 Markdown、公式、Mermaid 相关的程序集。
+  -->
+
+  <!-- Markdown 预览：代码块配色跟随浅色 / 深色主题；中文字体显式列出，避免回退到错误字重 -->
+  <!--
+    字体直接设在文字块上（主题给 TextBlock 设的字体会挡住继承）。
+    中文字体必须显式列出：靠系统回退时，粗体中文会被当成常规字重显示。
+  -->
+  <Style Selector="md|MarkdownTextBlock">
+    <!-- 只用一个字体（启动时挑选，见 Services/Fonts.cs）：逗号分隔的字体列表不会合成斜体 / 粗体，中文斜体就不倾斜 -->
+    <Setter Property="FontFamily" Value="{DynamicResource MarkdownFontFamily}" />
+  </Style>
+
+  <!-- 库里没有样式的行内格式：下划线 ++…++ / <u>、高亮 ==…== / <mark>、下标、上标 -->
+  <!--
+    下划线用 MarkdownUnderline（见 Services/Fonts.cs）而不是内置的 Underline：
+    内置下划线遇到穿过它的笔画会断开（skip-ink），中文笔画多，下划线就成了一段一段的。
+  -->
+  <Style Selector="md|MarkdownRenderer Span.Emphasis.Underline">
+    <Setter Property="TextDecorations" Value="{DynamicResource MarkdownUnderline}" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer md|Link">
+    <Setter Property="TextDecorations" Value="{DynamicResource MarkdownUnderline}" />
+  </Style>
+
+  <!-- 代码块：按钮提示用中文；代码超出宽度（出现横向滚动条）时，在代码下方给滚动条留出位置，不挡住最后一行 -->
+  <Style Selector="md|CodeBlock /template/ ToggleButton#PART_ToggleTextWrapButton">
+    <Setter Property="ToolTip.Tip" Value="自动换行" />
+  </Style>
+  <Style Selector="md|CodeBlock /template/ Button#PART_CopyButton">
+    <Setter Property="ToolTip.Tip" Value="复制代码" />
+  </Style>
+  <Style Selector="md|CodeBlock.hscroll /template/ md|MarkdownTextBlock#PART_CodeTextBlock">
+    <Setter Property="Margin" Value="4,4,4,18" />
+  </Style>
+
+  <!-- 任务列表的选框可以点击（库默认不响应鼠标），见 Views/TaskListCheckBoxNode.cs -->
+  <Style Selector="md|MarkdownRenderer CheckBox.TaskList.Interactive">
+    <Setter Property="IsHitTestVisible" Value="True" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <!-- 未勾选时框里是空的（没有背景就点不中），补一个透明背景 -->
+  <Style Selector="md|MarkdownRenderer CheckBox.TaskList.Interactive:not(:checked) /template/ Border#Border">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer CheckBox.TaskList.Interactive:pointerover /template/ Border#Border">
+    <Setter Property="BorderBrush" Value="DodgerBlue" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer Span.Emphasis.Highlight">
+    <Setter Property="Background" Value="{DynamicResource MarkdownHighlightBrush}" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer Span.Emphasis.Subscript Run">
+    <Setter Property="BaselineAlignment" Value="Subscript" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeS}" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer Span.Emphasis.Superscript Run">
+    <Setter Property="BaselineAlignment" Value="Superscript" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeS}" />
+  </Style>
+
+  <!-- 提示框（> [!NOTE] 等，见 Views/AlertBlockView.cs） -->
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock">
+    <Setter Property="BorderThickness" Value="3,0,0,0" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Background" Value="{DynamicResource SecondaryCardBackgroundColor}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AlertNoteBrush}" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock TextBlock.AlertTitle">
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="FontFamily" Value="{DynamicResource MarkdownFontFamily}" />
+    <Setter Property="Foreground" Value="{DynamicResource AlertNoteBrush}" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Tip"><Setter Property="BorderBrush" Value="{DynamicResource AlertTipBrush}" /></Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Tip TextBlock.AlertTitle"><Setter Property="Foreground" Value="{DynamicResource AlertTipBrush}" /></Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Important"><Setter Property="BorderBrush" Value="{DynamicResource AlertImportantBrush}" /></Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Important TextBlock.AlertTitle"><Setter Property="Foreground" Value="{DynamicResource AlertImportantBrush}" /></Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Warning"><Setter Property="BorderBrush" Value="{DynamicResource AlertWarningBrush}" /></Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Warning TextBlock.AlertTitle"><Setter Property="Foreground" Value="{DynamicResource AlertWarningBrush}" /></Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Caution"><Setter Property="BorderBrush" Value="{DynamicResource AlertCautionBrush}" /></Style>
+  <Style Selector="md|MarkdownRenderer Border.AlertBlock.Caution TextBlock.AlertTitle"><Setter Property="Foreground" Value="{DynamicResource AlertCautionBrush}" /></Style>
+
+  <!-- 独立公式（$$…$$）居中、稍大 -->
+  <Style Selector="md|MarkdownRenderer Panel.MathBlock">
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="Margin" Value="0,6" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer ratex|FormulaControl.MathBlock">
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeXl}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <!-- 五、六级标题库里没有加粗 -->
+  <Style Selector="md|MarkdownRenderer Border.Heading5Block md|MarkdownTextBlock, md|MarkdownRenderer Border.Heading6Block md|MarkdownTextBlock">
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+  <!-- 段落、列表、表格等块之间留出间距 -->
+  <Style Selector="md|MarkdownRenderer StackPanel">
+    <Setter Property="Spacing" Value="10" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer StackPanel.ListItemBlock">
+    <Setter Property="Spacing" Value="4" />
+  </Style>
+  <Style Selector="md|CodeBlock">
+    <Setter Property="ColorTheme" Value="{DynamicResource MarkdownCodeTheme}" />
+    <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Microsoft YaHei UI, Noto Sans Mono CJK SC, monospace" />
+  </Style>
+</Styles>

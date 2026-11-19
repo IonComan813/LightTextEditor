@@ -21,7 +21,7 @@ internal sealed class DocumentTab(DocumentViewModel doc, TextEditor editor)
     public TextEditor Editor { get; } = editor;
 
     /// <summary>语法高亮（TextMate）。</summary>
-    public AvaloniaEdit.TextMate.TextMate.Installation? Highlighting { get; set; }
+    public Services.EditorHighlighter? Highlighting { get; set; }
 
     /// <summary>Markdown 预览（第一次切换到预览时创建）。</summary>
     public MarkdownPreview? Preview { get; set; }

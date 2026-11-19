@@ -101,7 +101,7 @@ public partial class MainWindow : Window
         {
             foreach (var t in _tabs)
             {
-                if (t.Highlighting is not null) SyntaxHighlighting.ApplyTheme(t.Highlighting);
+                t.Highlighting?.ApplyTheme();
                 ApplySelectionColors(t.Editor);
             }
         };
@@ -268,13 +268,13 @@ public partial class MainWindow : Window
     {
         var editor = CreateEditor(doc);
         var tab = new DocumentTab(doc, editor);
-        tab.Highlighting = SyntaxHighlighting.Install(editor, doc.Extension);
+        tab.Highlighting = new EditorHighlighter(editor, doc.Extension);
         doc.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(DocumentViewModel.Notice) && tab == _active) UpdateNoticeBar();
             if (e.PropertyName == nameof(DocumentViewModel.Extension))
             {
-                if (tab.Highlighting is not null) SyntaxHighlighting.ApplyLanguage(tab.Highlighting, doc.Extension);
+                tab.Highlighting?.SetLanguage(doc.Extension);
                 if (tab.IsPreviewing && !IsMarkdown(doc)) SetPreview(tab, false);
                 if (tab == _active) ApplyPageLayout(tab); // 改成 / 不再是 Markdown：版面宽度跟着变
             }

@@ -35,7 +35,7 @@ internal sealed class MarkdownPreview : ScrollViewer
     static MarkdownPreview()
     {
         // 代码块不自动换行且代码超出宽度时（会出现横向滚动条）加上 hscroll 类，
-        // 样式据此在代码下方给滚动条留出位置（见 Styles/AppStyles.axaml）；放得下时不留空
+        // 样式据此在代码下方给滚动条留出位置（见 Styles/MarkdownStyles.axaml）；放得下时不留空
         ExtentProperty.Changed.AddClassHandler<ScrollViewer>((sv, _) => UpdateCodeBlockScrollRoom(sv));
         ViewportProperty.Changed.AddClassHandler<ScrollViewer>((sv, _) => UpdateCodeBlockScrollRoom(sv));
     }
@@ -49,6 +49,7 @@ internal sealed class MarkdownPreview : ScrollViewer
 
     public MarkdownPreview()
     {
+        App.EnsureMarkdownResources();
         _renderer = new MarkdownRenderer
         {
             MarkdownBuilder = _markdown,
