@@ -22,7 +22,7 @@ on:
       version:
         description: '版本号（只构建，不上传）'
         required: false
-        default: '0.0.0-manual'
+        default: '0.0.1-manual'
 
 permissions:
   contents: write
@@ -70,13 +70,17 @@ jobs:
           case "$EVENT" in
             release) tag="$RELEASE_TAG" ;;
             push) tag="$REF_NAME" ;;
-            workflow_dispatch) tag="" ; version="${INPUT_VERSION:-0.0.0-manual}" ;;
-            *) tag="" ; version="0.0.0-ci.$RUN_NUMBER" ;;
+            workflow_dispatch) tag="" ; version="${INPUT_VERSION:-0.0.1-manual}" ;;
+            *) tag="" ; version="0.0.1-ci.$RUN_NUMBER" ;;
           esac
           if [ -n "$tag" ]; then version="${tag#[vV]}"; fi
           # Velopack 要求语义化版本：主.次.修订，可带 -预发布 / +构建 后缀
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::版本号“$version”不是 主.次.修订 格式（例如 v1.2.3 或 v1.2.3-beta.1）"
+            exit 1
+          fi
+          if [[ "$version" =~ ^0\.0\.0([-+]|$) ]]; then
+            echo "::error::版本号至少是 0.0.1（Velopack 不接受 0.0.0）"
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
