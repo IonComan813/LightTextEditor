@@ -58,6 +58,7 @@ public partial class MainWindow : Window
         // Windows：标签所在的标题栏区域按客户区处理，右键不弹系统窗口菜单（见 Services/TitleBarTabsHook.cs）
         TitleBarTabsHook.Install(this, p => TabFromSource(this.InputHitTest(p)) is not null);
 
+        Tabs.LayoutUpdated += (_, _) => UpdateTabScrollArrows();
         Tabs.TabItemsSource = _tabs;
         Tabs.TabItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DocumentTab>(
             (tab, _) => tab is null ? null! : new TabHeaderView(tab, CloseTabFromButton));
@@ -88,9 +89,8 @@ public partial class MainWindow : Window
         EditorArea.AddHandler(PointerWheelChangedEvent, OnEditorAreaWheel, RoutingStrategies.Bubble);
         EditorHost.SizeChanged += (_, e) =>
         {
-            if (!_vm.CenteredLayout || _active is null || e.WidthChanged == false) return;
-            ApplyPageLayout(_active.Editor);
-            if (_active.Preview is { } preview) ApplyPageLayout(preview);
+            if (_active is null || !e.WidthChanged) return;
+            ApplyPageLayout(_active);
         };
         AddHandler(PointerMovedEvent, OnMenuPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
@@ -276,6 +276,7 @@ public partial class MainWindow : Window
             {
                 if (tab.Highlighting is not null) SyntaxHighlighting.ApplyLanguage(tab.Highlighting, doc.Extension);
                 if (tab.IsPreviewing && !IsMarkdown(doc)) SetPreview(tab, false);
+                if (tab == _active) ApplyPageLayout(tab); // 改成 / 不再是 Markdown：版面宽度跟着变
             }
         };
         // Ctrl+V / Shift+Insert：Markdown 文件中可以粘贴图片
@@ -393,6 +394,30 @@ public partial class MainWindow : Window
                 ToolTip.SetTip(button, left ? "向左滚动标签" : "向右滚动标签");
             }
         }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// 标签放得下时不显示两端的滚动箭头，放不下时显示。
+    /// FluentAvalonia 只在某些时机（而且是在子元素测量之前）判断，窗口变宽（如最大化）后箭头常常留着；
+    /// 这里每次布局完成后按实际尺寸再判断一次。
+    /// </summary>
+    private void UpdateTabScrollArrows()
+    {
+        var list = Tabs.GetVisualDescendants().OfType<FluentAvalonia.UI.Controls.Primitives.FATabViewListView>().FirstOrDefault();
+        if (list is null || list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is not { } scroller) return;
+        var left = Tabs.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == "LeftContentPresenter");
+        var add = Tabs.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == "AddButtonHost");
+
+        // 标签可用的宽度 = 标签栏宽度 − 左侧图标 − “+” 按钮
+        double space = Tabs.Bounds.Width - (left?.Bounds.Width ?? 0) - (add?.Bounds.Width ?? 0);
+        if (space <= 0) return;
+        bool overflow = scroller.Extent.Width > space + 0.5;
+        var wanted = overflow ? Avalonia.Controls.Primitives.ScrollBarVisibility.Visible : Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden;
+        if (ScrollViewer.GetHorizontalScrollBarVisibility(list) != wanted)
+            ScrollViewer.SetHorizontalScrollBarVisibility(list, wanted);
+        if (Math.Abs(list.MaxWidth - space) > 0.5) list.MaxWidth = space;
+        // 放得下时回到最左边（之前滚动过的话，最左边的标签会一直被挡住一部分）
+        if (!overflow && scroller.Offset.X != 0) scroller.Offset = scroller.Offset.WithX(0);
     }
 
     private void SelectRelative(int delta)
@@ -731,7 +756,8 @@ public partial class MainWindow : Window
             ShowLineNumbers = _vm.ShowLineNumbers,
             WordWrap = _vm.WordWrap,
             Background = Brushes.Transparent,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            // 不要设置 HorizontalScrollBarVisibility：AvaloniaEdit 用它实现自动换行（换行 = 禁用横向滚动），
+            // 在 WordWrap 之后再设为 Auto 会让新打开的标签不换行（要关掉再打开才生效）
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
             IsVisible = false,
         };
@@ -816,27 +842,33 @@ public partial class MainWindow : Window
             editor.ShowLineNumbers = _vm.ShowLineNumbers;
             StyleLineNumberMargin(editor);
         }
-        ApplyPageLayout(editor);
-        if (_active?.Editor == editor && _active.Preview is { } preview) ApplyPageLayout(preview);
+        if (_active?.Editor == editor) ApplyPageLayout(_active);
     }
 
     // ───────────────────────── 居中布局 ─────────────────────────
 
     /// <summary>
-    /// 居中布局：编辑器 / 预览变成窗口中间固定宽度的“页面”（宽度随缩放变化），两侧是颜色稍深的底色，类似 Word。
-    /// 不自动换行时，超出页面的长行在页面内横向滚动（滚动条在页面底部）。关闭时铺满窗口。
+    /// 版面宽度（编辑器和 Markdown 预览）：
+    /// <list type="bullet">
+    /// <item>居中布局：窗口中间固定宽度的“页面”（宽度随缩放变化），两侧是颜色稍深的底色，类似 Word。
+    ///   不自动换行时，超出页面的长行在页面内横向滚动（滚动条在页面底部）。</item>
+    /// <item>否则：代码和纯文本铺满窗口；Markdown 靠左、宽度不超过页面宽度（预览中的代码块、提示框不会拉到最右边），
+    ///   滚动条仍在窗口右边。</item>
+    /// </list>
     /// </summary>
-    private void ApplyPageLayout(Control view)
+    private void ApplyPageLayout(DocumentTab tab)
     {
-        bool on = _vm.CenteredLayout;
-        // 页面宽度；窗口比页面窄时铺满（窗口大小变化时重新计算，见构造函数）
+        bool centered = _vm.CenteredLayout;
         double pageWidth = Settings.CenteredLayoutWidth * _vm.Zoom;
         double available = EditorHost.Bounds.Width;
-        view.Width = on ? (available > 0 ? Math.Min(pageWidth, available) : pageWidth) : double.NaN;
-        view.HorizontalAlignment = on ? Avalonia.Layout.HorizontalAlignment.Center : Avalonia.Layout.HorizontalAlignment.Stretch;
-        if (view is Avalonia.Controls.Primitives.TemplatedControl page)
+        double width = available > 0 ? Math.Min(pageWidth, available) : pageWidth; // 窗口比页面窄时铺满
+
+        foreach (var view in new Control?[] { tab.Editor, tab.Preview })
         {
-            if (on)
+            if (view is not Avalonia.Controls.Primitives.TemplatedControl page) continue;
+            page.Width = centered ? width : double.NaN;
+            page.HorizontalAlignment = centered ? Avalonia.Layout.HorizontalAlignment.Center : Avalonia.Layout.HorizontalAlignment.Stretch;
+            if (centered)
             {
                 page[!BackgroundProperty] = this.GetResourceObservable("PageBackgroundBrush").ToBinding();
                 page[!BorderBrushProperty] = this.GetResourceObservable("PageBorderBrush").ToBinding();
@@ -848,7 +880,14 @@ public partial class MainWindow : Window
                 page.BorderThickness = default;
             }
         }
-        if (on) EditorArea[!Border.BackgroundProperty] = this.GetResourceObservable("PageDeskBrush").ToBinding();
+
+        // Markdown 源码：右侧留白，换行宽度 = 页面宽度（编辑器本身仍铺满，滚动条在窗口右边）
+        bool limitMarkdown = !centered && IsMarkdown(tab.Doc);
+        tab.Editor.Padding = limitMarkdown && available > pageWidth ? new Thickness(0, 0, available - pageWidth, 0) : default;
+        // Markdown 预览：内容最宽为页面宽度（缩放由预览自己按比例放大，这里用 100% 时的宽度）
+        tab.Preview?.SetContentMaxWidth(limitMarkdown ? Settings.CenteredLayoutWidth : double.PositiveInfinity);
+
+        if (centered) EditorArea[!Border.BackgroundProperty] = this.GetResourceObservable("PageDeskBrush").ToBinding();
         else EditorArea.Background = null;
     }
 

@@ -18,6 +18,7 @@ internal sealed class MarkdownPreview : ScrollViewer
 
     private readonly MarkdownRenderer _renderer;
     private readonly LayoutTransformControl _zoomHost;
+    private readonly LeftAlignedWidthLimit _widthLimit;
     private readonly ObservableStringBuilder _markdown = new();
     private string? _text;
     private double _zoom = 1;
@@ -51,7 +52,6 @@ internal sealed class MarkdownPreview : ScrollViewer
         _renderer = new MarkdownRenderer
         {
             MarkdownBuilder = _markdown,
-            // 靠左、铺满宽度，与源码编辑器一致；需要窄一点的版面时用“查看 → 居中布局”
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Margin = new Thickness(32, 20, 32, 40),
         };
@@ -63,7 +63,9 @@ internal sealed class MarkdownPreview : ScrollViewer
         _renderer.AddHandler(Button.ClickEvent, OnButtonClick);
 
         // 缩放：整体按比例放大（文字、图片、代码块一起），相当于浏览器的缩放
-        _zoomHost = new LayoutTransformControl { Child = _renderer, HorizontalAlignment = HorizontalAlignment.Stretch };
+        // 内容靠左，最宽为 SetContentMaxWidth 设置的宽度（Markdown 不铺满整个窗口）
+        _widthLimit = new LeftAlignedWidthLimit { Child = _renderer };
+        _zoomHost = new LayoutTransformControl { Child = _widthLimit, HorizontalAlignment = HorizontalAlignment.Stretch };
 
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
@@ -82,6 +84,9 @@ internal sealed class MarkdownPreview : ScrollViewer
         _markdown.Clear();
         _markdown.Append(text);
     }
+
+    /// <summary>内容的最大宽度（100% 缩放时；缩放后按比例变宽）。内容靠左。</summary>
+    public void SetContentMaxWidth(double width) => _widthLimit.Limit = width;
 
     /// <summary>源码被预览自身改动（勾选任务）后调用：显示的内容已经一致，下次不用重新渲染。</summary>
     public void AcceptSourceText(string text) => _text = text;
@@ -191,5 +196,39 @@ internal sealed class MarkdownPreview : ScrollViewer
         }
         Dispatcher.UIThread.Post(Apply, DispatcherPriority.Background);
         if (!once) DispatcherTimer.RunOnce(Apply, TimeSpan.FromMilliseconds(150));
+    }
+}
+
+/// <summary>
+/// 让内容靠左、宽度为 min(可用宽度, <see cref="Limit"/>)。
+/// （Stretch + MaxWidth 时 Avalonia 会把内容居中；Left 时内容只有自身需要的宽度，短文档的代码块会变窄。）
+/// </summary>
+internal sealed class LeftAlignedWidthLimit : Decorator
+{
+    private double _limit = double.PositiveInfinity;
+
+    public double Limit
+    {
+        get => _limit;
+        set
+        {
+            if (_limit.Equals(value)) return;
+            _limit = value;
+            InvalidateMeasure();
+        }
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        double width = Math.Min(availableSize.Width, Limit);
+        if (Child is null) return default;
+        Child.Measure(new Size(width, availableSize.Height));
+        return new Size(double.IsInfinity(width) ? Child.DesiredSize.Width : width, Child.DesiredSize.Height);
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        Child?.Arrange(new Rect(0, 0, Math.Min(finalSize.Width, Limit), finalSize.Height));
+        return finalSize;
     }
 }

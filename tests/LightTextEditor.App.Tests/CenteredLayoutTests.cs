@@ -3,6 +3,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LightTextEditor.App.Views;
 using LightTextEditor.Core.Settings;
 
@@ -57,5 +58,64 @@ public class CenteredLayoutTests
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(window.Bounds.Width, tab.Preview.Bounds.Width, 0);
         Assert.False(App.Settings.CenteredLayout);
+    }
+
+    private static async Task<MainWindow> OpenAsync(AppSettings settings, params (string Name, string Text)[] files)
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "page-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(library);
+        settings.SampleNoteCreated = true;
+        settings.LibraryPath = library;
+        settings.RestoreSession = false;
+        App.Settings = settings;
+        var window = new MainWindow { Width = 1600, Height = 600 };
+        window.Initialize([]);
+        window.Show();
+        foreach (var (name, text) in files)
+        {
+            File.WriteAllText(Path.Combine(library, name), text);
+            await window.OpenFilesAsync([Path.Combine(library, name)]);
+        }
+        Dispatcher.UIThread.RunJobs();
+        return window;
+    }
+
+    [AvaloniaFact]
+    public async Task NewTab_WrapsImmediately_WhenWordWrapIsOn()
+    {
+        var window = await OpenAsync(new AppSettings { WordWrap = true }, ("a.txt", new string('字', 500)));
+        var editor = window.ActiveTab!.Editor;
+        Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled, editor.HorizontalScrollBarVisibility);
+        Assert.True(editor.ExtentWidth <= editor.ViewportWidth + 1);
+        Assert.True(editor.TextArea.TextView.VisualLines[0].TextLines.Count > 1);
+    }
+
+    [AvaloniaFact]
+    public async Task Markdown_IsLimitedToPageWidth_OnTheLeft_TextFillsTheWindow()
+    {
+        var long1 = new string('字', 500);
+        var window = await OpenAsync(new AppSettings { WordWrap = true },
+            ("a.txt", long1), ("b.md", "# 标题\n\n" + long1 + "\n\n> [!NOTE]\n> 提示\n\n```\ncode\n```\n"));
+        var md = window.ActiveTab!;
+        // Markdown 源码：编辑器铺满（滚动条在窗口右边），但换行宽度为页面宽度
+        Assert.Equal(window.Bounds.Width, md.Editor.Bounds.Width, 0);
+        Assert.InRange(md.Editor.ViewportWidth, 800, 861);
+
+        // Markdown 预览：内容靠左，宽度不超过页面宽度（代码块不会拉到最右边）
+        window.TogglePreview();
+        for (int i = 0; i < 6; i++) { await Task.Delay(50); Dispatcher.UIThread.RunJobs(); }
+        var block = md.Preview!.GetVisualDescendants().OfType<LiveMarkdown.Avalonia.CodeBlock>().Single();
+        var blockLeft = block.TranslatePoint(default, window)!.Value.X;
+        Assert.True(blockLeft < 60);
+        Assert.True(blockLeft + block.Bounds.Width <= 861);
+        Assert.True(block.IsCodeWrapped); // 代码块的换行只由块上的按钮控制，与“查看 → 自动换行”无关
+        window.ViewModel.WordWrap = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(block.IsCodeWrapped);
+
+        // 纯文本铺满窗口
+        window.Select(window.AllTabs().First(t => t.Doc.Extension == ".txt"));
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(window.AllTabs().First(t => t.Doc.Extension == ".txt").Editor.ViewportWidth > 1400);
     }
 }

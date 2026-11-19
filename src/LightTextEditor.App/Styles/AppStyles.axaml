@@ -1,6 +1,7 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="using:FluentAvalonia.UI.Controls"
+        xmlns:uip="using:FluentAvalonia.UI.Controls.Primitives"
         xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
         xmlns:ratex="clr-namespace:RaTeX.Avalonia;assembly=RaTeX.Avalonia">
 
@@ -196,6 +197,18 @@
   <Style Selector="ui|FATabViewItem:not(:selected):not(:pointerover) Button.tabClose:not(.dirty)">
     <Setter Property="Opacity" Value="0" />
     <Setter Property="IsHitTestVisible" Value="False" />
+  </Style>
+
+  <!--
+    标签栏用普通的 StackPanel（FluentAvalonia 默认是 VirtualizingStackPanel）：
+    虚拟化会卸掉滚出视野的标签，窗口变宽后不一定重新生成，标签就“消失”了；标签不多，不需要虚拟化。
+  -->
+  <Style Selector="uip|FATabViewListView">
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate>
+        <StackPanel Orientation="Horizontal" />
+      </ItemsPanelTemplate>
+    </Setter>
   </Style>
 
   <!-- 状态栏上的扁平按钮 -->
