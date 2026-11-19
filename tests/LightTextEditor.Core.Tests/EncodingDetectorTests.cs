@@ -237,4 +237,22 @@ public class EncodingDetectorTests
         Assert.Equal("Big5（繁体中文）", TextEncoding.FromCodePage(950).Description);
         Assert.Equal("UTF-8", TextEncoding.Utf8(false).Description);
     }
+
+    [Theory]
+    [InlineData(28591, "ISO-8859-1（西欧）")]
+    [InlineData(28592, "ISO-8859-2（中欧）")]
+    [InlineData(28593, "ISO-8859-3（南欧）")]
+    [InlineData(28594, "ISO-8859-4（波罗的海）")]
+    [InlineData(28595, "ISO-8859-5（西里尔文）")]
+    [InlineData(28596, "ISO-8859-6（阿拉伯文）")]
+    [InlineData(28597, "ISO-8859-7（希腊文）")]
+    [InlineData(28598, "ISO-8859-8（希伯来文）")]
+    [InlineData(28599, "ISO-8859-9（土耳其文）")]
+    [InlineData(28603, "ISO-8859-13（波罗的海）")]
+    [InlineData(28605, "ISO-8859-15（西欧）")]
+    [InlineData(21866, "KOI8-U（乌克兰文）")]
+    public void Iso8859Family_HasLanguageHints(int codePage, string expected)
+    {
+        Assert.Equal(expected, TextEncoding.FromCodePage(codePage).Description);
+    }
 }
