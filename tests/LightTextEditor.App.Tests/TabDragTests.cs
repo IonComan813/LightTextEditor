@@ -117,7 +117,7 @@ public class TabDragTests
         foreach (var t in window.AllTabs())
         {
             Assert.Equal(0, (t.TabItem.RenderTransform as Avalonia.Media.TranslateTransform)?.X ?? 0, 3);
-            Assert.Equal(0, t.TabItem.ZIndex);
+            Assert.Equal(t == window.ActiveTab ? 20 : 0, t.TabItem.ZIndex); // 选中的标签层级为 20（FATabViewItem 自己的设定）
         }
         Assert.Equal(new[] { b, a, c }, window.AllTabs());
     }

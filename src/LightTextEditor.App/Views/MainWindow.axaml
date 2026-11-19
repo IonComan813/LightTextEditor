@@ -114,12 +114,17 @@
       </Menu>
     </Border>
 
-    <!-- ③ 提示条（外部修改、编码不确定等） -->
-    <ui:FAInfoBar x:Name="NoticeBar" Grid.Row="2" IsOpen="False" IsClosable="True" Margin="8,4,8,0" />
-
     <!-- ④ 编辑区：每个标签页一个编辑器，只显示当前的 -->
     <Border Grid.Row="3" x:Name="EditorArea">
       <Panel x:Name="EditorHost" />
+    </Border>
+
+    <!-- ③ 提示条（外部修改、编码不确定、已移动等）：浮在编辑区右上角，不挤占正文位置 -->
+    <Border Grid.Row="3" x:Name="NoticeHost" IsVisible="False" ZIndex="10"
+            VerticalAlignment="Top" HorizontalAlignment="Right" MaxWidth="560" Margin="12,8,24,0"
+            Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+            CornerRadius="6" BoxShadow="0 4 14 0 #33000000">
+      <ui:FAInfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" />
     </Border>
 
     <!-- ⑤ 状态栏 -->

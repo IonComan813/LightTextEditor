@@ -79,8 +79,11 @@ public partial class MainWindow
         preview.AddHandler(PointerWheelChangedEvent, (_, e) =>
         {
             if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
-            SetZoom(_vm.Zoom + (e.Delta.Y > 0 ? 0.1 : -0.1));
             e.Handled = true;
+            if (e.Delta.Y == 0) return;
+            // 以鼠标所在处为中心缩放
+            preview.SetZoom(ClampZoom(_vm.Zoom + (e.Delta.Y > 0 ? 0.1 : -0.1)), e.GetPosition(preview));
+            SetZoom(preview.Zoom);
         }, RoutingStrategies.Tunnel);
         EditorHost.Children.Add(preview);
         return preview;

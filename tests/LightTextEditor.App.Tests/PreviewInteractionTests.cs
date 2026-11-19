@@ -100,13 +100,42 @@ public class PreviewInteractionTests
 
         window.MouseWheel(new Point(450, 300), new Vector(0, 1), RawInputModifiers.Control);
         window.MouseWheel(new Point(450, 300), new Vector(0, 1), RawInputModifiers.Control);
-        await Settle(3);
-        Assert.Equal(1.2, preview.Zoom, 3);
+        Assert.Equal(1.2, preview.Zoom, 3); // 同步完成，不等下一帧
         Assert.True(preview.Extent.Height > before * 1.1);
-        Assert.Equal(offset, preview.Offset.Y); // 没有滚动
+        // 鼠标下的内容位置不变（以鼠标为中心缩放）
+        double anchorY = 300 - preview.TranslatePoint(default, window)!.Value.Y;
+        Assert.Equal((offset + anchorY) / 1.0, (preview.Offset.Y + anchorY) / 1.2, 0);
 
         // 回到编辑：编辑器使用同样的缩放
         window.TogglePreview();
         Assert.Equal(App.Settings.EditorFontSize * 1.2, tab.Editor.FontSize, 3);
+    }
+
+    [AvaloniaFact]
+    public async Task CodeBlockButtons_HaveChineseTips_CopyShowsFeedback_AndNoWrapLeavesRoomForScrollBar()
+    {
+        var (window, tab) = await OpenPreviewAsync("```csharp\nvar x = 1; // " + new string('x', 300) + "\n```\n");
+        var block = tab.Preview!.GetVisualDescendants().OfType<LiveMarkdown.Avalonia.CodeBlock>().Single();
+        var wrap = block.GetVisualDescendants().OfType<ToggleButton>().First(b => b.Name == "PART_ToggleTextWrapButton");
+        var copy = block.GetVisualDescendants().OfType<Button>().First(b => b.Name == "PART_CopyButton");
+        Assert.Equal("自动换行", ToolTip.GetTip(wrap));
+        Assert.Equal("复制代码", ToolTip.GetTip(copy));
+
+        var icon = copy.Content;
+        Click(window, CenterOf(window, copy));
+        Assert.IsType<Avalonia.Controls.Shapes.Path>(copy.Content);
+        Assert.Equal("已复制", ToolTip.GetTip(copy));
+        await Task.Delay(1700);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(icon, copy.Content);
+        Assert.Equal("复制代码", ToolTip.GetTip(copy));
+
+        // 关闭自动换行：代码下方留出横向滚动条的位置
+        var text = block.GetVisualDescendants().OfType<LiveMarkdown.Avalonia.MarkdownTextBlock>().First(t => t.Name == "PART_CodeTextBlock");
+        double wrappedBottom = text.Margin.Bottom;
+        Click(window, CenterOf(window, wrap));
+        await Settle(3);
+        Assert.False(block.IsCodeWrapped);
+        Assert.True(text.Margin.Bottom >= wrappedBottom + 12);
     }
 }

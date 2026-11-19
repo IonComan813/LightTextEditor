@@ -71,19 +71,27 @@ internal sealed class MarkdownPreview : ScrollViewer
     /// <summary>源码被预览自身改动（勾选任务）后调用：显示的内容已经一致，下次不用重新渲染。</summary>
     public void AcceptSourceText(string text) => _text = text;
 
-    /// <summary>缩放比例（1 = 100%）。保持当前阅读位置的比例不变。</summary>
+    /// <summary>缩放比例（1 = 100%）。设置时保持视口中间的内容不动。</summary>
     public double Zoom
     {
         get => _zoom;
-        set
-        {
-            if (Math.Abs(value - _zoom) < 0.001) return;
-            double ratio = ScrollRatio;
-            _zoom = value;
-            _zoomHost.LayoutTransform = Math.Abs(value - 1) < 0.001 ? null : new ScaleTransform(value, value);
-            _zoomHost.UpdateLayout();
-            ScrollToRatio(ratio, once: true);
-        }
+        set => SetZoom(value, null);
+    }
+
+    /// <summary>
+    /// 缩放，保持 <paramref name="anchor"/>（视口内的位置，通常是鼠标所在处；为 null 时取视口中间）下的内容不动。
+    /// 同步完成布局和滚动定位：先布局、下一帧再滚动会让画面跳一下（闪烁）。
+    /// </summary>
+    public void SetZoom(double zoom, Point? anchor)
+    {
+        if (Math.Abs(zoom - _zoom) < 0.001) return;
+        double anchorY = Math.Clamp(anchor?.Y ?? Viewport.Height / 2, 0, Math.Max(0, Viewport.Height));
+        double contentY = (Offset.Y + anchorY) / _zoom; // 缩放前的内容坐标
+        _zoom = zoom;
+        _zoomHost.LayoutTransform = Math.Abs(zoom - 1) < 0.001 ? null : new ScaleTransform(zoom, zoom);
+        UpdateLayout();
+        double range = Math.Max(0, Extent.Height - Viewport.Height);
+        Offset = new Vector(0, Math.Clamp(contentY * zoom - anchorY, 0, range));
     }
 
     /// <summary>
@@ -102,12 +110,50 @@ internal sealed class MarkdownPreview : ScrollViewer
 
     private void OnButtonClick(object? sender, RoutedEventArgs e)
     {
+        if (e.Source is Button { Name: "PART_CopyButton" } copy)
+        {
+            ShowCopied(copy);
+            return;
+        }
         if (e.Source is not CheckBox { Tag: int offset } box || !box.Classes.Contains(TaskListCheckBoxNode.CheckBoxClass))
             return;
         e.Handled = true;
         bool isChecked = box.IsChecked == true;
         if (TaskToggled?.Invoke(offset, isChecked) != true)
             box.IsChecked = !isChecked;
+    }
+
+    /// <summary>
+    /// 代码块的“复制”按钮点击后：图标换成绿色对勾，并提示“已复制”，1.5 秒后恢复。
+    /// （库自带的按钮复制后没有任何反馈。）
+    /// </summary>
+    private static void ShowCopied(Button button)
+    {
+        if (button.Tag is "copied") return;
+        var original = button.Content;
+        button.Tag = "copied";
+        button.Content = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse("M2,8.5 L6,12.5 L14,3.5"),
+            Stroke = new SolidColorBrush(Color.FromRgb(0x22, 0xA3, 0x5A)),
+            StrokeThickness = 2,
+            StrokeLineCap = PenLineCap.Round,
+            StrokeJoin = PenLineJoin.Round,
+            Width = 14,
+            Height = 14,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(button, "已复制");
+        ToolTip.SetIsOpen(button, true);
+        DispatcherTimer.RunOnce(() =>
+        {
+            button.Content = original;
+            button.Tag = null;
+            ToolTip.SetIsOpen(button, false);
+            button.ClearValue(ToolTip.TipProperty); // 恢复样式里的“复制代码”
+        }, TimeSpan.FromMilliseconds(1500));
     }
 
     /// <summary>当前滚动位置占可滚动范围的比例（0~1）。</summary>

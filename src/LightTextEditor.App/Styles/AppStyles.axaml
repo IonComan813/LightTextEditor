@@ -26,6 +26,17 @@
     <Setter Property="TextDecorations" Value="{DynamicResource MarkdownUnderline}" />
   </Style>
 
+  <!-- 代码块：按钮提示用中文；不自动换行时，横向滚动条浮在代码下方留出的空白上，不挡住最后一行 -->
+  <Style Selector="md|CodeBlock /template/ ToggleButton#PART_ToggleTextWrapButton">
+    <Setter Property="ToolTip.Tip" Value="自动换行" />
+  </Style>
+  <Style Selector="md|CodeBlock /template/ Button#PART_CopyButton">
+    <Setter Property="ToolTip.Tip" Value="复制代码" />
+  </Style>
+  <Style Selector="md|CodeBlock[IsCodeWrapped=False] /template/ md|MarkdownTextBlock#PART_CodeTextBlock">
+    <Setter Property="Margin" Value="4,4,4,18" />
+  </Style>
+
   <!-- 任务列表的选框可以点击（库默认不响应鼠标），见 Views/TaskListCheckBoxNode.cs -->
   <Style Selector="md|MarkdownRenderer CheckBox.TaskList.Interactive">
     <Setter Property="IsHitTestVisible" Value="True" />

@@ -65,6 +65,10 @@ public partial class MainWindow : Window
         Tabs.AddHandler(PointerCaptureLostEvent, (_, _) => EndTabDrag(), RoutingStrategies.Direct | RoutingStrategies.Bubble, handledEventsToo: true);
         Tabs.SelectionChanged += (_, _) => OnSelectedTabChanged();
         Tabs.AddTabButtonClick += (_, _) => NewDocument();
+        NoticeBar.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == FAInfoBar.IsOpenProperty) NoticeHost.IsVisible = NoticeBar.IsOpen;
+        };
         NoticeBar.Closed += (_, args) =>
         {
             if (args.Reason == FAInfoBarCloseReason.CloseButton && _active is not null)
@@ -156,6 +160,7 @@ public partial class MainWindow : Window
     // ───────────────────────── 标签页管理 ─────────────────────────
 
     internal List<DocumentTab> AllTabs() => _tabs.ToList();
+    internal FATabView Tabs_ForTest() => Tabs;
 
     private async void CloseTabFromButton(DocumentTab tab) => await CloseTabAsync(tab);
 
@@ -323,6 +328,7 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private bool _isDraggingTab;
     private double _dragGrabOffset; // 鼠标相对被拖动标签左边缘的位置
+    private Control? _draggedContainer; // 当前显示被拖动标签的控件
     private readonly Dictionary<Control, (double From, long Start)> _tabSlides = [];
     private DispatcherTimer? _tabSlideTimer;
 
@@ -391,6 +397,14 @@ public partial class MainWindow : Window
         }
 
         var dragged = _dragTab.TabItem;
+        if (_draggedContainer is { } previous && previous != dragged)
+        {
+            // 交换位置时标签控件可能被回收重建：旧控件上的位移和层级要清掉，否则它被复用给别的标签时会错位、盖住别的标签
+            _tabSlides.Remove(previous);
+            SetTabOffset(previous, 0);
+            RestoreTabZIndex(previous);
+        }
+        _draggedContainer = dragged;
         _tabSlides.Remove(dragged);
         dragged.ZIndex = 100; // 浮在经过的标签上方
         SetTabOffset(dragged, left - TabLayoutLeft(dragged));
@@ -410,12 +424,24 @@ public partial class MainWindow : Window
 
     private void EndTabDrag()
     {
-        // 松开后被拖动的标签滑回它的位置
-        if (_isDraggingTab && _dragTab?.Header is not null)
-            SlideTab(_dragTab.TabItem, TabOffset(_dragTab.TabItem));
+        var dragged = _isDraggingTab && _dragTab?.Header is not null ? _dragTab.TabItem : null;
+        if (_draggedContainer is { } stale && stale != dragged)
+        {
+            SetTabOffset(stale, 0);
+            RestoreTabZIndex(stale);
+        }
+        _draggedContainer = null;
         _dragTab = null;
         _isDraggingTab = false;
+        // 松开后被拖动的标签滑回它的位置（滑完后恢复层级）
+        if (dragged is not null) SlideTab(dragged, TabOffset(dragged));
     }
+
+    private bool IsDraggedContainer(Control item) => _isDraggingTab && item == _draggedContainer;
+
+    /// <summary>恢复标签的层级：选中的标签为 20（FATabViewItem 自己的设定，盖住相邻标签的分隔线），其他为 0。</summary>
+    private static void RestoreTabZIndex(Control item) =>
+        item.ZIndex = item is FATabViewItem { IsSelected: true } ? 20 : 0;
 
     /// <summary>标签在布局中的左边缘（不含拖动 / 动画产生的位移），相对于标签栏。</summary>
     private double TabLayoutLeft(Control item) =>
@@ -436,7 +462,7 @@ public partial class MainWindow : Window
         {
             _tabSlides.Remove(item);
             SetTabOffset(item, 0);
-            if (_dragTab?.Header is null || item != _dragTab.TabItem) item.ZIndex = 0;
+            if (!IsDraggedContainer(item)) RestoreTabZIndex(item);
             return;
         }
         SetTabOffset(item, offset);
@@ -454,7 +480,7 @@ public partial class MainWindow : Window
             {
                 _tabSlides.Remove(item);
                 SetTabOffset(item, 0);
-                if (_dragTab?.Header is null || item != _dragTab.TabItem) item.ZIndex = 0;
+                if (!IsDraggedContainer(item)) RestoreTabZIndex(item);
             }
             else
             {
@@ -679,9 +705,11 @@ public partial class MainWindow : Window
         _vm.CharacterCount = _active.Doc.Document.TextLength;
     }
 
+    private static double ClampZoom(double zoom) => Math.Round(Math.Clamp(zoom, 0.5, 4.0), 1);
+
     private void SetZoom(double zoom)
     {
-        _vm.Zoom = Math.Round(Math.Clamp(zoom, 0.5, 4.0), 1);
+        _vm.Zoom = ClampZoom(zoom);
         if (_active is null) return;
         ApplyViewOptions(_active.Editor);
         if (_active.Preview is not null) _active.Preview.Zoom = _vm.Zoom;

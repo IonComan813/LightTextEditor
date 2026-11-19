@@ -1,3 +1,5 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -109,7 +111,13 @@ public class LibraryTests
         var tab = window.ActiveTab!;
         Assert.True(window.IsExternalFile(tab.Doc));
 
+        var editorTop = tab.Editor.TranslatePoint(default, window)!.Value.Y;
         Assert.True(await window.MoveToLibraryAsync(tab, confirm: false));
+        Dispatcher.UIThread.RunJobs();
+        // 提示浮在正文上方，不把编辑器往下挤
+        Assert.NotNull(tab.Doc.Notice);
+        Assert.True(window.FindControl<Avalonia.Controls.Border>("NoticeHost")!.IsVisible);
+        Assert.Equal(editorTop, tab.Editor.TranslatePoint(default, window)!.Value.Y);
         var moved = Path.Combine(library, "搬家.txt");
         Assert.Equal(moved, tab.Doc.FilePath);
         Assert.False(File.Exists(external));
