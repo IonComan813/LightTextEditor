@@ -1,0 +1,121 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Avalonia 12 在"内容延伸到标题栏"时，会自己绘制标题栏（标题文字 + 全屏/最小化/最大化/关闭）。
+    这里替换成精简版：
+    - 不显示标题文字（标签栏本身就是标题栏）
+    - 不提供全屏按钮（Avalonia 12 退出全屏后会丢失按钮层）
+    - 按钮高度 = 标题栏高度（窗口的 ExtendClientAreaTitleBarHeightHint，与标签栏一致）
+    - 中文提示
+    PART_* 名称和 ElementRole 让 Avalonia 处理点击，并让 Windows 11 在最大化按钮上显示贴靠布局。
+  -->
+
+  <!-- Windows 11 风格的标题栏按钮 -->
+  <ControlTheme x:Key="LteCaptionButton" TargetType="Button">
+    <Setter Property="Width" Value="46" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Background" Background="{TemplateBinding Background}">
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Content="{TemplateBinding Content}"
+                            Foreground="{TemplateBinding Foreground}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^ /template/ Border#PART_Background">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.083" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="^:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+    </Style>
+    <Style Selector="^:pressed">
+      <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.3" />
+    </Style>
+
+    <!-- 关闭按钮：红色 -->
+    <Style Selector="^.close:pointerover">
+      <Setter Property="Background" Value="#C42B1C" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="^.close:pressed">
+      <Setter Property="Background" Value="#C83C31" />
+      <Setter Property="Foreground" Value="#E6FFFFFF" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="LteWindowDecorations" TargetType="WindowDrawnDecorations">
+    <Setter Property="DefaultTitleBarHeight" Value="32" />
+    <Setter Property="DefaultFrameThickness" Value="1" />
+    <Setter Property="DefaultShadowThickness" Value="8" />
+    <Setter Property="Template">
+      <WindowDrawnDecorationsTemplate>
+        <WindowDrawnDecorationsContent>
+          <WindowDrawnDecorationsContent.Overlay>
+            <StackPanel Name="PART_CaptionButtons"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Height="{TemplateBinding TitleBarHeight}">
+              <Button Name="PART_MinimizeButton" Theme="{StaticResource LteCaptionButton}"
+                      WindowDecorationProperties.ElementRole="MinimizeButton"
+                      ToolTip.Tip="最小化">
+                <Path Data="M0,0.5 H10" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1" Width="10" Height="1" />
+              </Button>
+              <Button Name="PART_MaximizeButton" Theme="{StaticResource LteCaptionButton}"
+                      WindowDecorationProperties.ElementRole="MaximizeButton"
+                      ToolTip.Tip="最大化">
+                <Panel Width="10" Height="10">
+                  <Path Name="PART_MaximizeGlyph" Data="M0.5,0.5 H9.5 V9.5 H0.5 Z"
+                        Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1" />
+                  <Path Name="PART_RestoreGlyph" Data="M0.5,2.5 H7.5 V9.5 H0.5 Z M2.5,2.5 V0.5 H9.5 V7.5 H7.5"
+                        Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1" IsVisible="False" />
+                </Panel>
+              </Button>
+              <Button Name="PART_CloseButton" Theme="{StaticResource LteCaptionButton}" Classes="close"
+                      WindowDecorationProperties.ElementRole="CloseButton"
+                      ToolTip.Tip="关闭">
+                <Path Data="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5"
+                      Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1" Width="10" Height="10" />
+              </Button>
+            </StackPanel>
+          </WindowDrawnDecorationsContent.Overlay>
+        </WindowDrawnDecorationsContent>
+      </WindowDrawnDecorationsTemplate>
+    </Setter>
+
+    <!-- 最大化后显示"还原"图标 -->
+    <Style Selector="^:maximized /template/ Path#PART_MaximizeGlyph">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="^:maximized /template/ Path#PART_RestoreGlyph">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:maximized /template/ Button#PART_MaximizeButton">
+      <Setter Property="ToolTip.Tip" Value="向下还原" />
+    </Style>
+
+    <!-- 平台不允许的操作隐藏对应按钮（例如不可调整大小的窗口） -->
+    <Style Selector="^:not(:has-minimize) /template/ Button#PART_MinimizeButton">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="^:not(:has-maximize) /template/ Button#PART_MaximizeButton">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <!-- 万一进入了全屏（例如系统快捷键），也保证按钮层可用：不在这里隐藏任何东西 -->
+  </ControlTheme>
+</ResourceDictionary>

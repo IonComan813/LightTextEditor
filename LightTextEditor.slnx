@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LightTextEditor.App/LightTextEditor.App.csproj" />
+    <Project Path="src/LightTextEditor.Core/LightTextEditor.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LightTextEditor.App.Tests/LightTextEditor.App.Tests.csproj" />
+    <Project Path="tests/LightTextEditor.Core.Tests/LightTextEditor.Core.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,31 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    应用图标：记事板（32×32 坐标系，矢量）。
+    Assets/app.ico 由同一图形渲染生成（见 tests/LightTextEditor.App.Tests/IconExport.cs）。
+  -->
+  <DrawingImage x:Key="AppIcon">
+    <DrawingGroup>
+      <!-- 固定画布大小，保证缩放比例一致 -->
+      <GeometryDrawing Brush="Transparent" Geometry="M0,0 H32 V32 H0 Z" />
+
+      <!-- 纸张 -->
+      <GeometryDrawing Brush="#FFFFFF" Geometry="M6,6.5 A2.5,2.5 0 0 1 8.5,4 H23.5 A2.5,2.5 0 0 1 26,6.5 V27.5 A2.5,2.5 0 0 1 23.5,30 H8.5 A2.5,2.5 0 0 1 6,27.5 Z">
+        <GeometryDrawing.Pen>
+          <Pen Brush="#7C879A" Thickness="1" />
+        </GeometryDrawing.Pen>
+      </GeometryDrawing>
+      <!-- 顶部装订条 -->
+      <GeometryDrawing Brush="#2F6FED" Geometry="M6,6.5 A2.5,2.5 0 0 1 8.5,4 H23.5 A2.5,2.5 0 0 1 26,6.5 V10 H6 Z" />
+      <!-- 装订孔 -->
+      <GeometryDrawing Brush="#FFFFFF" Geometry="M10,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M16,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M22,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0" />
+      <!-- 文字行 -->
+      <GeometryDrawing Geometry="M10,15 H22 M10,19.5 H22 M10,24 H22">
+        <GeometryDrawing.Pen>
+          <Pen Brush="#A9B3C2" Thickness="1.8" LineCap="Round" />
+        </GeometryDrawing.Pen>
+      </GeometryDrawing>
+
+    </DrawingGroup>
+  </DrawingImage>
+</ResourceDictionary>

@@ -1,0 +1,150 @@
+# 构建 Windows 安装包（Velopack，单个 Setup.exe，自带 .NET 运行时）并附加到 GitHub Release。
+#
+# 触发方式：
+# - 推送版本标签（v1.2.3 或 1.2.3，可带预发布后缀如 v1.2.3-beta.1）：构建后附加到该标签的 Release；
+#   还没有 Release 时自动创建一个草稿（Draft），检查后手动发布。
+# - 在 GitHub 上发布 Release（Draft a new release → 选择新标签 → Publish）：构建并附加到这个 Release。
+#   注意 GitHub 不会为“保存为草稿”触发工作流（标签在发布时才创建）。
+#   如果这个 Release 已经带有安装包（例如先推送了标签），不会重新构建，已发布的文件保持不变。
+# - 修改本文件的 Pull Request、手动运行（Actions → 构建安装包 → Run workflow）：只构建，不上传到 Release，
+#   安装包可以在运行结果的 Artifacts 中下载。
+name: 构建安装包
+
+on:
+  push:
+    tags: ['v[0-9]*', '[0-9]*']
+  release:
+    types: [published]
+  pull_request:
+    paths: ['.github/workflows/release.yml']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（只构建，不上传）'
+        required: false
+        default: '0.0.1-manual'
+
+permissions:
+  contents: write
+
+# 发布 Release 时如果同时创建了标签，两个事件会各触发一次：同一标签只保留最后一次运行
+concurrency:
+  group: installer-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  VPK_VERSION: 1.2.161 # 与 src/LightTextEditor.App 引用的 Velopack 版本保持一致
+  PACK_ID: LightTextEditor
+
+jobs:
+  test:
+    name: 测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: 运行测试
+        run: dotnet test -c Release
+
+  installer:
+    name: Windows 安装包
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 确定版本号
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          case "$EVENT" in
+            release) tag="$RELEASE_TAG" ;;
+            push) tag="$REF_NAME" ;;
+            workflow_dispatch) tag="" ; version="${INPUT_VERSION:-0.0.1-manual}" ;;
+            *) tag="" ; version="0.0.1-ci.$RUN_NUMBER" ;;
+          esac
+          if [ -n "$tag" ]; then version="${tag#[vV]}"; fi
+          # Velopack 要求语义化版本：主.次.修订，可带 -预发布 / +构建 后缀
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::版本号“$version”不是 主.次.修订 格式（例如 v1.2.3 或 v1.2.3-beta.1）"
+            exit 1
+          fi
+          if [[ "$version" =~ ^0\.0\.0([-+]|$) ]]; then
+            echo "::error::版本号至少是 0.0.1（Velopack 不接受 0.0.0）"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "标签：${tag:-（无，只构建）}  版本：$version"
+
+      - name: 检查 Release 是否已有安装包
+        id: existing
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -q -- '-Setup\.exe$'; then
+            echo "这个 Release 已经带有安装包，跳过构建（不替换已发布的文件）。"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.existing.outputs.skip != 'true'
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.existing.outputs.skip != 'true'
+        with:
+          dotnet-version: 10.0.x
+
+      - name: 发布（自带运行时、预编译）
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >
+          dotnet publish src/LightTextEditor.App -c Release -r win-x64 --self-contained true
+          -p:Version="$VERSION" -o publish
+
+      - name: 打包（Velopack）
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          AUTHORS: ${{ github.repository_owner }}
+        run: |
+          dotnet tool install vpk --version "$VPK_VERSION" --tool-path .tools
+          ./.tools/vpk pack --packId "$PACK_ID" --packVersion "$VERSION" --packDir publish \
+            --mainExe LightTextEditor.exe --packTitle LightTextEditor --packAuthors "$AUTHORS" \
+            --icon src/LightTextEditor.App/Assets/app.ico --outputDir Releases
+          ls -la Releases
+
+      - name: 上传到运行结果（Artifacts）
+        if: steps.existing.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: LightTextEditor-${{ steps.version.outputs.version }}-win
+          path: Releases/*
+          if-no-files-found: error
+
+      - name: 附加到 GitHub Release
+        if: steps.existing.outputs.skip != 'true' && steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # 只推送了标签：创建草稿，检查后手动发布
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+              --title "LightTextEditor $TAG" --generate-notes
+          fi
+          # Setup.exe 是单文件安装包；其余文件（便携版、更新包与索引）供以后的自动更新使用
+          gh release upload "$TAG" Releases/* --repo "$GITHUB_REPOSITORY" --clobber

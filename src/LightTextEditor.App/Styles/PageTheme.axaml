@@ -1,0 +1,16 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- “查看 → 居中布局”：页面与两侧底色（类似 Word 的白色页面放在灰色桌面上） -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="PageDeskBrush" Color="#E8E8E8" />
+      <SolidColorBrush x:Key="PageBackgroundBrush" Color="#FDFDFD" />
+      <SolidColorBrush x:Key="PageBorderBrush" Color="#14000000" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="PageDeskBrush" Color="#1B1B1B" />
+      <SolidColorBrush x:Key="PageBackgroundBrush" Color="#2B2B2B" />
+      <SolidColorBrush x:Key="PageBorderBrush" Color="#24FFFFFF" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>
