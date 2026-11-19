@@ -29,10 +29,16 @@ public partial class MainWindow : Window
 
     private static AppSettings Settings => App.Settings;
 
+    /// <summary>后台时的资源节省（测试用）。</summary>
+    internal BackgroundMode BackgroundMode { get; }
+
     public MainWindow()
     {
         InitializeComponent();
         DataContext = _vm;
+        // 不在前台时少占资源（见 Services/BackgroundMode.cs）
+        BackgroundMode = new BackgroundMode(this);
+        Closed += (_, _) => BackgroundMode.Dispose();
 
         _vm.WordWrap = Settings.WordWrap;
         _vm.ShowLineNumbers = Settings.ShowLineNumbers;

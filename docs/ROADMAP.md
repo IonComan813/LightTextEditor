@@ -255,7 +255,9 @@ LightTextEditor.sln
 ### M7 · 打磨与发布（2 周）
 
 - [ ] 设置页（SettingsExpander 风格）、快捷键自定义
-- [ ] 大文件模式、性能分析（启动时间目标 < 1 秒）
+- [ ] 大文件模式
+- [x] 性能优化与测量（见 docs/PERFORMANCE.md）：按需加载 Markdown 语法和预览组件、减少每次按键的开销、后台时回收内存、Windows 效率模式、ReadyToRun 发布
+- [ ] 启动时间目标 < 1 秒：Linux 软件渲染下已约 0.9 秒，待 Windows 实机测量（`LTE_STARTUP_REPORT`）
 - [ ] Velopack 安装包与自动更新、文件关联、跳转列表 (Jump List)
 - [ ] 可访问性检查（键盘导航、高对比度）
 

@@ -13,6 +13,25 @@
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>
 
+  <!--
+    运行时资源占用（测量方法见 docs/PERFORMANCE.md）：
+    - 不用后台（并发）垃圾回收：堆只有几 MB 到几十 MB，完整回收只需几毫秒；省一个线程和约 9 MB 内存。
+    - 发布到具体平台时（dotnet publish -r win-x64）预编译为本机代码（ReadyToRun）：
+      启动时不必即时编译，启动时间约减半、内存更少；代价是安装包变大。
+  -->
+  <PropertyGroup>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <PublishReadyToRun Condition="'$(RuntimeIdentifier)' != ''">true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <!-- 发布时不带第三方库的调试符号（SkiaSharp / HarfBuzz 的 .pdb 约 100 MB，用户用不到）；保留本程序自己的 -->
+  <Target Name="ExcludeThirdPartyPdbsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Extension)' == '.pdb' And !$([System.String]::Copy('%(Filename)').StartsWith('LightTextEditor'))" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.6" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />

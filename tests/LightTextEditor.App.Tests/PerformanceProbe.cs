@@ -126,4 +126,41 @@ public class PerformanceProbe
         Report("预览", "第一次切换到预览", sw.Elapsed.TotalMilliseconds, "ms");
         ReportMemory("预览后");
     }
+
+    /// <summary>打开、预览再关闭几个文件之后，后台回收（与 BackgroundMode 相同的做法）能还给系统多少内存。</summary>
+    [AvaloniaFact]
+    public async Task ReleaseMemoryAfterClosingTabs()
+    {
+        if (!Enabled) return;
+        var window = CreateWindow(out var library);
+        string[] langs = ["python", "csharp", "javascript", "rust", "go", "java", "cpp", "html", "css", "sql"];
+        var paths = new List<string>();
+        for (int n = 0; n < 6; n++)
+        {
+            var path = Path.Combine(library, $"note{n}.md");
+            File.WriteAllText(path, "# 标题\n\n" + string.Join("\n", langs.Select(l => $"```{l}\nx = 1\n```\n")) +
+                string.Join("\n\n", Enumerable.Range(1, 300).Select(i => $"第 {i} 段，**粗体**、`代码`、$x^{i}$。")));
+            paths.Add(path);
+        }
+        await window.OpenFilesAsync(paths);
+        foreach (var tab in window.AllTabs().Where(t => t.Doc.FilePath is not null).ToList())
+        {
+            window.Select(tab);
+            window.TogglePreview();
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+        await SettleAsync();
+        foreach (var tab in window.AllTabs().ToList()) await window.CloseTabAsync(tab);
+        await SettleAsync();
+
+        static double PrivateMb() { using var p = Process.GetCurrentProcess(); p.Refresh(); return p.PrivateMemorySize64 / 1048576.0; }
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        Report("关闭标签后", "私有内存（普通回收后）", PrivateMb(), "MB");
+        Report("关闭标签后", "GC 已提交内存", GC.GetGCMemoryInfo().TotalCommittedBytes / 1048576.0, "MB");
+        System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        Report("后台回收后", "私有内存", PrivateMb(), "MB");
+        Report("后台回收后", "GC 已提交内存", GC.GetGCMemoryInfo().TotalCommittedBytes / 1048576.0, "MB");
+    }
 }

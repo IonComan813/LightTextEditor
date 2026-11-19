@@ -21,6 +21,7 @@
 - 标签页可以拖动排序，右键有关闭其他、复制路径等菜单；标签放不下时两端有滚动按钮；打开文件总是放在新标签页中
 - “查看 → 居中布局”：正文（含 Markdown 预览）显示在窗口中间固定宽度的页面上，类似 Word；不开时代码和纯文本铺满窗口，Markdown 靠左、宽度不超过页面宽度
 - 外部修改检测、会话恢复、单实例（从资源管理器打开的文件会进入已打开的窗口）
+- 资源占用低：Markdown 只加载代码块用到的语法、预览相关的组件在第一次预览时才加载；窗口在后台时回收内存，Windows 上进入效率模式（EcoQoS）
 
 开发计划见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
@@ -35,6 +36,14 @@ dotnet run --project src/LightTextEditor.App
 ```bash
 dotnet test
 ```
+
+发布（预编译为本机代码，启动更快；不带第三方库的调试符号）：
+
+```bash
+dotnet publish src/LightTextEditor.App -c Release -r win-x64 --self-contained false -o publish
+```
+
+性能优化和测量方法见 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)。
 
 ## 目录结构
 

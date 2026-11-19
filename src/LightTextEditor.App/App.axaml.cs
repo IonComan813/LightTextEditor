@@ -39,6 +39,7 @@ public partial class App : Application
             var window = new MainWindow();
             desktop.MainWindow = window;
             window.Initialize(StartupArgs);
+            StartupReport.AttachIfRequested(window, desktop);
 
             if (SingleInstance is { IsFirstInstance: true } instance)
             {
