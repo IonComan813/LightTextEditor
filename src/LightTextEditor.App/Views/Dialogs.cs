@@ -32,14 +32,17 @@ public sealed record FileNamePromptResult(SaveChoice Choice, string? FileName);
 /// <summary>Fluent 风格的对话框。</summary>
 internal static class Dialogs
 {
-    /// <summary>当前是否有对话框打开（打开时屏蔽全局快捷键）。</summary>
-    public static bool IsOpen { get; private set; }
+    /// <summary>当前打开着对话框的窗口（每个窗口单独记录）。</summary>
+    private static readonly HashSet<TopLevel> OwnersWithOpenDialog = [];
+
+    /// <summary>这个窗口当前是否有对话框打开（打开时屏蔽快捷键、关闭标签等操作）。</summary>
+    public static bool IsOpenFor(TopLevel owner) => OwnersWithOpenDialog.Contains(owner);
 
     private static async Task<FAContentDialogResult> ShowAsync(FAContentDialog dialog, TopLevel owner)
     {
-        IsOpen = true;
+        bool added = OwnersWithOpenDialog.Add(owner);
         try { return await dialog.ShowAsync(owner); }
-        finally { IsOpen = false; }
+        finally { if (added) OwnersWithOpenDialog.Remove(owner); }
     }
 
     public static async Task<SaveChoice> ConfirmSaveAsync(TopLevel owner, string documentTitle)
@@ -72,6 +75,42 @@ internal static class Dialogs
             DefaultButton = FAContentDialogButton.Primary,
         };
         return await ShowAsync(dialog, owner) == FAContentDialogResult.Primary;
+    }
+
+    /// <summary>
+    /// 安装后第一次启动时的“安装完成”对话框。返回关闭时“打开默认应用设置”选框是否勾选。
+    /// （Velopack 的安装程序没有可定制的界面，所以放在第一次启动时。）
+    /// </summary>
+    public static async Task<bool> ShowInstalledAsync(TopLevel owner)
+    {
+        var openSettings = new CheckBox
+        {
+            Content = new TextBlock
+            {
+                Text = "关闭后打开 Windows“默认应用”设置，把 LightTextEditor 设为这些文件的默认程序",
+                TextWrapping = TextWrapping.Wrap,
+            },
+            IsChecked = true,
+            Margin = new Avalonia.Thickness(0, 12, 0, 0),
+        };
+        var panel = new StackPanel { MaxWidth = 440 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "LightTextEditor 已安装。.txt、.md 和常见代码文件的右键“打开方式”菜单中已经加入了本程序，" +
+                   "原来的默认程序不变。\n\n以后也可以在“文件 → 设为默认程序”中更改。",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(openSettings);
+
+        var dialog = new FAContentDialog
+        {
+            Title = "安装完成",
+            Content = panel,
+            CloseButtonText = "关闭",
+            DefaultButton = FAContentDialogButton.Close,
+        };
+        await ShowAsync(dialog, owner);
+        return openSettings.IsChecked == true;
     }
 
     public static async Task ShowErrorAsync(TopLevel owner, string title, string message)

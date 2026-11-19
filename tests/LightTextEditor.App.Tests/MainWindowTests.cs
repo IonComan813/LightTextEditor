@@ -222,6 +222,25 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
+    public async Task OpenDialog_OnlyBlocksItsOwnWindow()
+    {
+        var (a, _) = CreateWindow();
+        var (b, _) = CreateWindow();
+        var pending = Dialogs.ConfirmAsync(a, "标题", "内容", "确定");
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Dialogs.IsOpenFor(a));
+        Assert.False(Dialogs.IsOpenFor(b));
+
+        b.NewDocument();
+        Assert.True(await b.CloseTabAsync(b.ActiveTab!)); // 另一个窗口不受影响
+        Assert.False(await a.CloseTabAsync(a.ActiveTab!)); // 有对话框的窗口不能关闭标签
+
+        FindDialog(a).Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.None);
+        await pending;
+        Assert.False(Dialogs.IsOpenFor(a));
+    }
+
+    [AvaloniaFact]
     public async Task CloseTab_NotDirty_ClosesWithoutPrompt_AndKeepsOneTab()
     {
         var (window, _) = CreateWindow();

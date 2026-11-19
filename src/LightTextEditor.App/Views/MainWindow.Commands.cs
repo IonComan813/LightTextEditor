@@ -15,7 +15,7 @@ public partial class MainWindow
 
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (Dialogs.IsOpen) return;
+        if (Dialogs.IsOpenFor(this)) return;
 
         var mods = e.KeyModifiers;
         bool ctrl = mods.HasFlag(KeyModifiers.Control);
@@ -93,6 +93,15 @@ public partial class MainWindow
     }
 
     private void OnOpenLibraryFolderClick(object? sender, RoutedEventArgs e) => Shell.OpenFolder(LibraryPath);
+
+    /// <summary>
+    /// 设为默认程序：先确保已在“默认应用”中登记（便携版或开发时运行的也能用），再打开 Windows 设置页让用户选择。
+    /// </summary>
+    private void OnDefaultAppsClick(object? sender, RoutedEventArgs e)
+    {
+        FileAssociations.TryRegister();
+        FileAssociations.OpenDefaultAppsSettings();
+    }
 
     private async void OnChangeLibraryClick(object? sender, RoutedEventArgs e)
     {

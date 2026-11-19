@@ -259,7 +259,9 @@ LightTextEditor.sln
 - [x] 性能优化与测量（见 docs/PERFORMANCE.md）：按需加载 Markdown 语法和预览组件、减少每次按键的开销、后台时回收内存、Windows 效率模式、ReadyToRun 发布
 - [ ] 启动时间目标 < 1 秒：Linux 软件渲染下已约 0.9 秒，待 Windows 实机测量（`LTE_STARTUP_REPORT`）
 - [x] Velopack 安装包：推送标签 / 发布 Release 时由 GitHub Actions 构建单文件 Setup.exe 并附加到 Release
-- [ ] 自动更新（Velopack 的更新包和索引已随 Release 上传）、代码签名、文件关联、跳转列表 (Jump List)
+- [x] 同时构建自带 .NET（`win` 渠道）和不含 .NET（`win-slim` 渠道，安装时按需安装运行时）的安装包
+- [x] 文件关联：安装时加入“打开方式”菜单、在“默认应用”中登记，卸载时删除；安装后第一次启动可选打开默认应用设置
+- [ ] 自动更新（Velopack 的更新包和索引已随 Release 按渠道上传）、代码签名、跳转列表 (Jump List)
 - [ ] 可访问性检查（键盘导航、高对比度）
 
 **合计：约 13~20 周（全职）**；MVP（M0~M2）约 5~8 周。

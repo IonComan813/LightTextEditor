@@ -1,4 +1,7 @@
-# 构建 Windows 安装包（Velopack，单个 Setup.exe，自带 .NET 运行时）并附加到 GitHub Release。
+# 构建 Windows 安装包（Velopack，单个 Setup.exe）并附加到 GitHub Release。两种：
+# - LightTextEditor-win-Setup.exe：自带 .NET 运行时，不需要另装任何东西（约 75 MB）
+# - LightTextEditor-win-slim-Setup.exe：不含 .NET（约 40 MB）；电脑上没有 .NET 10 桌面运行时时，
+#   安装程序会自动下载安装（需要联网，可能请求管理员权限）
 #
 # 触发方式：
 # - 推送版本标签（v1.2.3 或 1.2.3，可带预发布后缀如 v1.2.3-beta.1）：构建后附加到该标签的 Release；
@@ -43,8 +46,8 @@ jobs:
     name: 测试
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
       - name: 运行测试
@@ -99,21 +102,23 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.existing.outputs.skip != 'true'
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         if: steps.existing.outputs.skip != 'true'
         with:
           dotnet-version: 10.0.x
 
-      - name: 发布（自带运行时、预编译）
+      - name: 发布（预编译；自带运行时版和不含运行时版）
         if: steps.existing.outputs.skip != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: >
-          dotnet publish src/LightTextEditor.App -c Release -r win-x64 --self-contained true
-          -p:Version="$VERSION" -o publish
+        run: |
+          dotnet publish src/LightTextEditor.App -c Release -r win-x64 --self-contained true \
+            -p:Version="$VERSION" -o publish/full
+          dotnet publish src/LightTextEditor.App -c Release -r win-x64 --self-contained false \
+            -p:Version="$VERSION" -o publish/slim
 
       - name: 打包（Velopack）
         if: steps.existing.outputs.skip != 'true'
@@ -122,14 +127,19 @@ jobs:
           AUTHORS: ${{ github.repository_owner }}
         run: |
           dotnet tool install vpk --version "$VPK_VERSION" --tool-path .tools
-          ./.tools/vpk pack --packId "$PACK_ID" --packVersion "$VERSION" --packDir publish \
-            --mainExe LightTextEditor.exe --packTitle LightTextEditor --packAuthors "$AUTHORS" \
-            --icon src/LightTextEditor.App/Assets/app.ico --outputDir Releases
+          common=(--packId "$PACK_ID" --packVersion "$VERSION" --runtime win-x64
+                  --mainExe LightTextEditor.exe --packTitle LightTextEditor --packAuthors "$AUTHORS"
+                  --icon src/LightTextEditor.App/Assets/app.ico --outputDir Releases)
+          # 自带 .NET：渠道 win → LightTextEditor-win-Setup.exe
+          ./.tools/vpk pack "${common[@]}" --channel win --packDir publish/full
+          # 不含 .NET：渠道 win-slim → LightTextEditor-win-slim-Setup.exe，安装时缺少运行时就自动安装
+          ./.tools/vpk pack "${common[@]}" --channel win-slim --packDir publish/slim \
+            --framework net10.0-x64-desktop
           ls -la Releases
 
       - name: 上传到运行结果（Artifacts）
         if: steps.existing.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: LightTextEditor-${{ steps.version.outputs.version }}-win
           path: Releases/*
@@ -146,5 +156,5 @@ jobs:
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
               --title "LightTextEditor $TAG" --generate-notes
           fi
-          # Setup.exe 是单文件安装包；其余文件（便携版、更新包与索引）供以后的自动更新使用
+          # 两个 *-Setup.exe 是单文件安装包；其余文件（便携版、更新包与索引，按渠道分开）供以后的自动更新使用
           gh release upload "$TAG" Releases/* --repo "$GITHUB_REPOSITORY" --clobber

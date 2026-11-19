@@ -592,7 +592,7 @@ public partial class MainWindow
 
     internal async Task<bool> CloseTabAsync(DocumentTab tab)
     {
-        if (Dialogs.IsOpen) return false;
+        if (Dialogs.IsOpenFor(this)) return false;
         if (await AskToSaveBeforeClosingAsync(tab) == SaveChoice.Cancel) return false;
         RemoveTab(tab);
         return true;
@@ -617,7 +617,7 @@ public partial class MainWindow
     /// <summary>窗口重新激活 / 切换标签时，检查文件是否被其他程序修改或删除。</summary>
     internal void CheckExternalChanges(DocumentTab? only = null)
     {
-        if (Dialogs.IsOpen) return;
+        if (Dialogs.IsOpenFor(this)) return;
         foreach (var tab in only is null ? AllTabs() : [only])
         {
             var doc = tab.Doc;

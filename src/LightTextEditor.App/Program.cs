@@ -11,7 +11,18 @@ internal static class Program
     {
         // 安装包（Velopack）在安装、更新、卸载时会带特殊参数启动本程序：必须最先处理，处理完会直接退出。
         // 不是通过安装包运行时（开发、测试）什么也不做。
-        VelopackApp.Build().Run();
+        var velopack = VelopackApp.Build()
+            // 安装后第一次启动：显示“安装完成”对话框（可选打开默认应用设置）
+            .OnFirstRun(_ => App.IsFirstRunAfterInstall = true);
+        if (OperatingSystem.IsWindows())
+        {
+            // 加入“打开方式”菜单、在“默认应用”设置中登记；更新后重新登记（新版本可能支持更多类型）
+            velopack = velopack
+                .OnAfterInstallFastCallback(_ => FileAssociations.TryRegister())
+                .OnAfterUpdateFastCallback(_ => FileAssociations.TryRegister())
+                .OnBeforeUninstallFastCallback(_ => FileAssociations.TryUnregister());
+        }
+        velopack.Run();
 
         // 已有实例在运行：把要打开的文件交给它，然后退出。
         using var instance = new SingleInstance();

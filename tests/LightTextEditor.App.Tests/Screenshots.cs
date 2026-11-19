@@ -130,4 +130,24 @@ public class Screenshots
         window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"encoding-menu-{theme}.png"));
         menu.Close();
     }
+
+    [AvaloniaFact]
+    public void InstalledDialog()
+    {
+        var dir = Environment.GetEnvironmentVariable("LTE_SCREENSHOT_DIR");
+        if (string.IsNullOrEmpty(dir)) return;
+        Directory.CreateDirectory(dir);
+        Avalonia.Application.Current!.RequestedThemeVariant = ThemeVariant.Light;
+        var library = Path.Combine(TestAppBuilder.Root, "shots-installed");
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.IsFirstRunAfterInstall = true;
+        var window = new MainWindow { Width = 1000, Height = 560 };
+        window.Initialize([]);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, "installed-dialog.png"));
+        window.GetVisualDescendants().OfType<FluentAvalonia.UI.Controls.FAContentDialog>().Single()
+            .Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.None);
+        App.IsFirstRunAfterInstall = false;
+    }
 }

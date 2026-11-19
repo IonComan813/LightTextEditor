@@ -37,6 +37,34 @@ public static class FileTypes
         new(".bat", "批处理"),
     ];
 
+    /// <summary>
+    /// 安装后加入资源管理器“打开方式”菜单的后缀：纯文本、Markdown、配置 / 数据文件和常见代码文件。
+    /// 只是出现在“打开方式”里，不会改变这些文件的默认程序（默认程序由用户在 Windows 设置中选择）。
+    /// 不包含双击就会执行或导入的类型中危险性较高的 .reg、.vbs 等。
+    /// </summary>
+    public static readonly IReadOnlyList<string> OpenWith =
+    [
+        // 文本、文档
+        ".txt", ".text", ".md", ".markdown", ".log", ".rst", ".adoc", ".tex", ".srt",
+        // 配置、数据
+        ".csv", ".tsv", ".json", ".jsonc", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
+        ".config", ".properties", ".env", ".editorconfig", ".gitignore", ".gitattributes", ".diff", ".patch",
+        // 网页
+        ".html", ".htm", ".css", ".scss", ".sass", ".less", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
+        ".vue", ".svelte",
+        // 脚本
+        ".py", ".pyw", ".rb", ".php", ".pl", ".lua", ".r", ".sh", ".bash", ".zsh", ".fish",
+        ".ps1", ".psm1", ".psd1", ".bat", ".cmd",
+        // .NET / JVM
+        ".cs", ".csx", ".fs", ".fsx", ".vb", ".xaml", ".axaml", ".csproj", ".fsproj", ".vbproj", ".props", ".targets",
+        ".sln", ".slnx", ".java", ".kt", ".kts", ".scala", ".groovy", ".gradle",
+        // C 系、其他编译型语言
+        ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".m", ".mm", ".swift", ".go", ".rs",
+        ".dart", ".zig", ".asm",
+        // 构建、数据库、接口
+        ".sql", ".cmake", ".mk", ".dockerfile", ".proto", ".graphql", ".gql",
+    ];
+
     /// <summary>状态栏显示的名称，如 "纯文本"、"Python"、".abc 文件"。</summary>
     public static string DisplayName(string extension)
     {
