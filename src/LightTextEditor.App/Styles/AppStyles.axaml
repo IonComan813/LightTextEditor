@@ -1,0 +1,76 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    标签页上的关闭按钮：
+    - 没有未保存更改：显示 ×
+    - 有未保存更改：显示 ●，鼠标移到 ● 上时变回 ×（与 Windows 11 记事本一致）
+  -->
+  <Style Selector="Button.tabClose">
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Margin" Value="6,0,0,0" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Focusable" Value="False" />
+  </Style>
+  <Style Selector="Button.tabClose Path.closeGlyph">
+    <Setter Property="Data" Value="M0,0 L9,9 M9,0 L0,9" />
+    <Setter Property="Stroke" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    <Setter Property="StrokeThickness" Value="1.3" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <Style Selector="Button.tabClose Ellipse.dirtyDot">
+    <Setter Property="Width" Value="8" />
+    <Setter Property="Height" Value="8" />
+    <Setter Property="Fill" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Button.tabClose.dirty Path.closeGlyph">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Button.tabClose.dirty Ellipse.dirtyDot">
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <Style Selector="Button.tabClose.dirty:pointerover Path.closeGlyph">
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <Style Selector="Button.tabClose.dirty:pointerover Ellipse.dirtyDot">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+
+  <!-- 状态栏上的扁平按钮 -->
+  <Style Selector="Button.statusItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="10,2" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="TextBlock.statusItem">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Margin" Value="10,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.statusSeparator">
+    <Setter Property="Width" Value="1" />
+    <Setter Property="Margin" Value="2,6" />
+    <Setter Property="Background" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+  </Style>
+
+  <!-- 菜单栏紧凑一些 -->
+  <Style Selector="Menu.mainMenu > MenuItem">
+    <Setter Property="Padding" Value="10,4" />
+  </Style>
+</Styles>

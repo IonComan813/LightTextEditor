@@ -1,0 +1,260 @@
+using System.Text;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using LightTextEditor.App.Services;
+using LightTextEditor.Core.Text;
+
+namespace LightTextEditor.App.Views;
+
+// 菜单命令、快捷键、状态栏菜单
+public partial class MainWindow
+{
+    // ───────────────────────── 快捷键 ─────────────────────────
+
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (Dialogs.IsOpen) return;
+
+        var mods = e.KeyModifiers;
+        bool ctrl = mods.HasFlag(KeyModifiers.Control);
+        bool shift = mods.HasFlag(KeyModifiers.Shift);
+        bool alt = mods.HasFlag(KeyModifiers.Alt);
+
+        Func<Task>? action = (ctrl, shift, alt, e.Key) switch
+        {
+            (true, false, false, Key.N) => () => { NewDocument(); return Task.CompletedTask; },
+            (true, false, false, Key.T) => () => { NewDocument(); return Task.CompletedTask; },
+            (true, false, false, Key.O) => OpenWithPickerAsync,
+            (true, false, false, Key.S) => () => SaveActiveAsync(),
+            (true, true, false, Key.S) => () => SaveActiveAsync(saveAs: true),
+            (true, false, true, Key.S) => SaveAllAsync,
+            (true, false, false, Key.W) or (true, false, false, Key.F4) =>
+                () => _active is null ? Task.CompletedTask : CloseTabAsync(_active),
+            (true, false, false, Key.Tab) or (true, false, false, Key.PageDown) => Sync(() => SelectRelative(1)),
+            (true, true, false, Key.Tab) or (true, false, false, Key.PageUp) => Sync(() => SelectRelative(-1)),
+            (false, false, false, Key.F2) => () => _active is null ? Task.CompletedTask : RenameAsync(_active),
+            (true, false, false, Key.G) => GoToLineAsync,
+            (true, false, false, Key.F) => Sync(() => OpenSearch(replace: false)),
+            (true, false, false, Key.H) => Sync(() => OpenSearch(replace: true)),
+            (false, false, false, Key.F5) => Sync(InsertDateTime),
+            (true, false, false, Key.OemPlus or Key.Add) => Sync(() => SetZoom(_vm.Zoom + 0.1)),
+            (true, false, false, Key.OemMinus or Key.Subtract) => Sync(() => SetZoom(_vm.Zoom - 0.1)),
+            (true, false, false, Key.D0 or Key.NumPad0) => Sync(() => SetZoom(1.0)),
+            (false, false, true, Key.Z) => Sync(() => _vm.WordWrap = !_vm.WordWrap),
+            (true, false, false, >= Key.D1 and <= Key.D9) => Sync(() => SelectByNumber(e.Key - Key.D0)),
+            _ => null,
+        };
+
+        if (action is null) return;
+        e.Handled = true;
+        _ = action();
+    }
+
+    private static Func<Task> Sync(Action action) => () =>
+    {
+        action();
+        return Task.CompletedTask;
+    };
+
+    /// <summary>Ctrl+1…8 选择对应标签页，Ctrl+9 选择最后一个（与浏览器一致）。</summary>
+    private void SelectByNumber(int n)
+    {
+        var tabs = AllTabs();
+        if (tabs.Count == 0) return;
+        Select(n == 9 ? tabs[^1] : tabs[Math.Min(n, tabs.Count) - 1]);
+    }
+
+    // ───────────────────────── 文件菜单 ─────────────────────────
+
+    private void OnNewClick(object? sender, RoutedEventArgs e) => NewDocument();
+    private async void OnOpenClick(object? sender, RoutedEventArgs e) => await OpenWithPickerAsync();
+    private async void OnSaveClick(object? sender, RoutedEventArgs e) => await SaveActiveAsync();
+    private async void OnSaveAsClick(object? sender, RoutedEventArgs e) => await SaveActiveAsync(saveAs: true);
+    private async void OnSaveAllClick(object? sender, RoutedEventArgs e) => await SaveAllAsync();
+
+    private async void OnRenameClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is not null) await RenameAsync(_active);
+    }
+
+    private void OnOpenLibraryFolderClick(object? sender, RoutedEventArgs e) => Shell.OpenFolder(LibraryPath);
+
+    private async void OnChangeLibraryClick(object? sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(LibraryPath);
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "选择笔记库文件夹",
+            SuggestedStartLocation = await StorageProvider.TryGetFolderFromPathAsync(LibraryPath),
+        });
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path) return;
+        Settings.LibraryPath = path;
+        App.SaveSettings();
+        if (_active is not null)
+            ShowTransientNotice(_active.Doc, new ViewModels.DocumentNotice("笔记库位置已更改", path,
+                ViewModels.NoticeSeverity.Success, []));
+    }
+
+    private async void OnCloseTabClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is not null) await CloseTabAsync(_active);
+    }
+
+    private void OnExitClick(object? sender, RoutedEventArgs e) => Close();
+
+    // ───────────────────────── 编辑菜单 ─────────────────────────
+
+    private void OnUndoClick(object? sender, RoutedEventArgs e) => _active?.Editor.Undo();
+    private void OnRedoClick(object? sender, RoutedEventArgs e) => _active?.Editor.Redo();
+    private void OnCutClick(object? sender, RoutedEventArgs e) => _active?.Editor.Cut();
+    private void OnCopyClick(object? sender, RoutedEventArgs e) => _active?.Editor.Copy();
+    private void OnPasteClick(object? sender, RoutedEventArgs e) => _active?.Editor.Paste();
+    private void OnSelectAllClick(object? sender, RoutedEventArgs e) => _active?.Editor.SelectAll();
+    private void OnFindClick(object? sender, RoutedEventArgs e) => OpenSearch(replace: false);
+    private void OnReplaceClick(object? sender, RoutedEventArgs e) => OpenSearch(replace: true);
+    private async void OnGoToLineClick(object? sender, RoutedEventArgs e) => await GoToLineAsync();
+    private void OnInsertDateTimeClick(object? sender, RoutedEventArgs e) => InsertDateTime();
+
+    private void OpenSearch(bool replace)
+    {
+        if (_active is null) return;
+        var editor = _active.Editor;
+        var panel = editor.SearchPanel;
+        if (panel is null) return;
+
+        // 有选中的单行文本时，作为搜索内容
+        var selected = editor.SelectedText;
+        if (!string.IsNullOrEmpty(selected) && !selected.Contains('\n'))
+            panel.SearchPattern = selected;
+
+        panel.IsReplaceMode = replace;
+        panel.Open();
+        panel.Reactivate();
+    }
+
+    private async Task GoToLineAsync()
+    {
+        if (_active is null) return;
+        var editor = _active.Editor;
+        var line = await Dialogs.PromptLineNumberAsync(this, editor.TextArea.Caret.Line, editor.Document.LineCount);
+        if (line is null) return;
+        editor.TextArea.Caret.Line = line.Value;
+        editor.TextArea.Caret.Column = 1;
+        editor.TextArea.Caret.BringCaretToView();
+        FocusEditor();
+    }
+
+    private void InsertDateTime()
+    {
+        if (_active is null) return;
+        var editor = _active.Editor;
+        var text = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        editor.Document.Replace(editor.SelectionStart, editor.SelectionLength, text);
+        editor.CaretOffset = editor.SelectionStart + text.Length;
+        FocusEditor();
+    }
+
+    // ───────────────────────── 查看菜单 ─────────────────────────
+
+    private void OnZoomInClick(object? sender, RoutedEventArgs e) => SetZoom(_vm.Zoom + 0.1);
+    private void OnZoomOutClick(object? sender, RoutedEventArgs e) => SetZoom(_vm.Zoom - 0.1);
+    private void OnZoomResetClick(object? sender, RoutedEventArgs e) => SetZoom(1.0);
+
+    private void OnThemeClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string theme }) return;
+        Settings.Theme = theme;
+        App.ApplyTheme(theme);
+        App.SaveSettings();
+        UpdateThemeMenu();
+    }
+
+    // ───────────────────────── 状态栏：编码 / 换行符 ─────────────────────────
+
+    private static readonly (string Name, Func<TextEncoding> Create)[] ReopenEncodings =
+    [
+        ("UTF-8", () => TextEncoding.Utf8(false)),
+        ("GB18030（简体中文，兼容 GBK）", () => TextEncoding.Gb18030(true)),
+        ("Big5（繁体中文）", () => Legacy(950)),
+        ("Shift-JIS（日文）", () => Legacy(932)),
+        ("EUC-KR（韩文）", () => Legacy(949)),
+        ("Windows-1252（西欧）", () => Legacy(1252)),
+        ("UTF-16 LE", () => new TextEncoding(new UnicodeEncoding(false, false), true, true)),
+        ("UTF-16 BE", () => new TextEncoding(new UnicodeEncoding(true, false), true, true)),
+    ];
+
+    private static readonly (string Name, Func<TextEncoding> Create)[] SaveEncodings =
+    [
+        ("UTF-8", () => TextEncoding.Utf8(false)),
+        ("UTF-8 with BOM", () => TextEncoding.Utf8(true)),
+        ("GB18030", () => TextEncoding.Gb18030(true)),
+        ("UTF-16 LE", () => new TextEncoding(new UnicodeEncoding(false, false), true, true)),
+        ("UTF-16 BE", () => new TextEncoding(new UnicodeEncoding(true, false), true, true)),
+    ];
+
+    private static TextEncoding Legacy(int codePage) => new(Encoding.GetEncoding(codePage), false, true);
+
+    private void OnEncodingButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is null || sender is not Control anchor) return;
+        var tab = _active;
+        var doc = tab.Doc;
+
+        var reopen = new MenuItem { Header = "以其他编码重新打开", IsEnabled = doc.FilePath is not null };
+        foreach (var (name, create) in ReopenEncodings)
+        {
+            var item = new MenuItem { Header = name };
+            item.Click += (_, _) => _ = ReopenWithEncodingAsync(doc, create());
+            reopen.Items.Add(item);
+        }
+
+        var saveWith = new MenuItem { Header = "以其他编码保存" };
+        foreach (var (name, create) in SaveEncodings)
+        {
+            var item = new MenuItem { Header = name };
+            item.Click += (_, _) => _ = SaveWithEncodingAsync(tab, create());
+            saveWith.Items.Add(item);
+        }
+
+        var flyout = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+        if (!doc.Encoding.IsCertain)
+        {
+            var confirm = new MenuItem { Header = $"确认 {doc.Encoding.DisplayName} 显示正常" };
+            confirm.Click += (_, _) =>
+            {
+                doc.Encoding = doc.Encoding with { IsCertain = true };
+                doc.Notice = null;
+            };
+            flyout.Items.Add(confirm);
+            flyout.Items.Add(new Separator());
+        }
+        flyout.Items.Add(reopen);
+        flyout.Items.Add(saveWith);
+        flyout.ShowAt(anchor);
+    }
+
+    private void OnLineEndingButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is null || sender is not Control anchor) return;
+        var doc = _active.Doc;
+        var flyout = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+        foreach (var ending in new[] { LineEnding.CrLf, LineEnding.Lf, LineEnding.Cr })
+        {
+            var item = new MenuItem
+            {
+                Header = ending.DisplayName(),
+                ToggleType = MenuItemToggleType.Radio,
+                IsChecked = doc.LineEnding == ending,
+            };
+            item.Click += (_, _) =>
+            {
+                doc.ChangeLineEnding(ending);
+                doc.Notice = null;
+            };
+            flyout.Items.Add(item);
+        }
+        flyout.ShowAt(anchor);
+    }
+}

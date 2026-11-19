@@ -1,0 +1,122 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="using:FluentAvalonia.UI.Controls"
+        xmlns:vm="using:LightTextEditor.App.ViewModels"
+        x:Class="LightTextEditor.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding WindowTitle}"
+        Width="1100" Height="720" MinWidth="480" MinHeight="300"
+        WindowStartupLocation="CenterScreen"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="40"
+        TransparencyLevelHint="Mica, AcrylicBlur, None"
+        DragDrop.AllowDrop="True">
+
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+    <!-- 标签栏以下的内容区域，颜色与选中的标签页一致 -->
+    <Border Grid.Row="1" Grid.RowSpan="4" x:Name="ContentBackground"
+            Background="{DynamicResource TabViewItemHeaderBackgroundSelected}" />
+
+    <!-- ① 标题栏 = 标签栏。空白处可拖动窗口。 -->
+    <Border x:Name="TitleBarDragArea" Grid.Row="0" Background="Transparent" />
+    <ui:FATabView x:Name="Tabs" Grid.Row="0"
+                  VerticalAlignment="Top"
+                  TabWidthMode="SizeToContent"
+                  IsAddTabButtonVisible="True"
+                  CanReorderTabs="True"
+                  CanDragTabs="False"
+                  Padding="0">
+      <ui:FATabView.TabStripHeader>
+        <Border x:Name="TabStripLeftInset" Background="Transparent" Width="8" />
+      </ui:FATabView.TabStripHeader>
+      <ui:FATabView.TabStripFooter>
+        <!-- 给系统标题栏按钮（最小化/最大化/关闭）留出位置，同时作为拖动区 -->
+        <Border x:Name="TabStripFooterDragArea" Background="Transparent" MinWidth="150" />
+      </ui:FATabView.TabStripFooter>
+    </ui:FATabView>
+
+    <!-- ② 菜单栏 -->
+    <Border Grid.Row="1" x:Name="MenuBarBorder">
+      <Menu Classes="mainMenu" x:Name="MainMenu" Margin="4,0">
+        <MenuItem Header="文件(_F)">
+          <MenuItem Header="新建标签页(_N)" InputGesture="Ctrl+N" Click="OnNewClick" />
+          <MenuItem Header="打开(_O)…" InputGesture="Ctrl+O" Click="OnOpenClick" />
+          <Separator />
+          <MenuItem Header="保存(_S)" InputGesture="Ctrl+S" Click="OnSaveClick" />
+          <MenuItem Header="另存为(_A)…" InputGesture="Ctrl+Shift+S" Click="OnSaveAsClick" />
+          <MenuItem Header="全部保存(_L)" InputGesture="Ctrl+Alt+S" Click="OnSaveAllClick" />
+          <MenuItem Header="重命名(_R)…" InputGesture="F2" Click="OnRenameClick" />
+          <Separator />
+          <MenuItem Header="打开笔记库文件夹(_D)" Click="OnOpenLibraryFolderClick" />
+          <MenuItem Header="更改笔记库位置…" Click="OnChangeLibraryClick" />
+          <Separator />
+          <MenuItem Header="关闭标签页(_C)" InputGesture="Ctrl+W" Click="OnCloseTabClick" />
+          <MenuItem Header="退出(_X)" Click="OnExitClick" />
+        </MenuItem>
+        <MenuItem Header="编辑(_E)">
+          <MenuItem Header="撤销(_U)" InputGesture="Ctrl+Z" Click="OnUndoClick" />
+          <MenuItem Header="重做(_R)" InputGesture="Ctrl+Y" Click="OnRedoClick" />
+          <Separator />
+          <MenuItem Header="剪切(_T)" InputGesture="Ctrl+X" Click="OnCutClick" />
+          <MenuItem Header="复制(_C)" InputGesture="Ctrl+C" Click="OnCopyClick" />
+          <MenuItem Header="粘贴(_P)" InputGesture="Ctrl+V" Click="OnPasteClick" />
+          <MenuItem Header="全选(_A)" InputGesture="Ctrl+A" Click="OnSelectAllClick" />
+          <Separator />
+          <MenuItem Header="查找(_F)…" InputGesture="Ctrl+F" Click="OnFindClick" />
+          <MenuItem Header="替换(_H)…" InputGesture="Ctrl+H" Click="OnReplaceClick" />
+          <MenuItem Header="转到行(_G)…" InputGesture="Ctrl+G" Click="OnGoToLineClick" />
+          <Separator />
+          <MenuItem Header="插入日期时间(_D)" InputGesture="F5" Click="OnInsertDateTimeClick" />
+        </MenuItem>
+        <MenuItem Header="查看(_V)">
+          <MenuItem Header="缩放">
+            <MenuItem Header="放大" InputGesture="Ctrl+OemPlus" Click="OnZoomInClick" />
+            <MenuItem Header="缩小" InputGesture="Ctrl+OemMinus" Click="OnZoomOutClick" />
+            <MenuItem Header="还原默认缩放" InputGesture="Ctrl+D0" Click="OnZoomResetClick" />
+          </MenuItem>
+          <Separator />
+          <MenuItem Header="自动换行(_W)" InputGesture="Alt+Z" ToggleType="CheckBox"
+                    IsChecked="{Binding WordWrap, Mode=TwoWay}" />
+          <MenuItem Header="行号(_L)" ToggleType="CheckBox"
+                    IsChecked="{Binding ShowLineNumbers, Mode=TwoWay}" />
+          <MenuItem Header="状态栏(_S)" ToggleType="CheckBox"
+                    IsChecked="{Binding ShowStatusBar, Mode=TwoWay}" />
+          <Separator />
+          <MenuItem Header="主题(_T)">
+            <MenuItem Header="跟随系统" Tag="System" ToggleType="Radio" GroupName="theme" x:Name="ThemeSystemItem" Click="OnThemeClick" />
+            <MenuItem Header="浅色" Tag="Light" ToggleType="Radio" GroupName="theme" x:Name="ThemeLightItem" Click="OnThemeClick" />
+            <MenuItem Header="深色" Tag="Dark" ToggleType="Radio" GroupName="theme" x:Name="ThemeDarkItem" Click="OnThemeClick" />
+          </MenuItem>
+        </MenuItem>
+      </Menu>
+    </Border>
+
+    <!-- ③ 提示条（外部修改、编码不确定等） -->
+    <ui:FAInfoBar x:Name="NoticeBar" Grid.Row="2" IsOpen="False" IsClosable="True" Margin="8,4,8,0" />
+
+    <!-- ④ 编辑区：每个标签页一个编辑器，只显示当前的 -->
+    <Border Grid.Row="3" x:Name="EditorArea">
+      <Panel x:Name="EditorHost" />
+    </Border>
+
+    <!-- ⑤ 状态栏 -->
+    <Border Grid.Row="4" x:Name="StatusBar" Height="28" IsVisible="{Binding ShowStatusBar}"
+            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+      <DockPanel LastChildFill="False" Margin="6,0">
+        <TextBlock DockPanel.Dock="Left" Classes="statusItem" Text="{Binding PositionText}" />
+        <Border DockPanel.Dock="Left" Classes="statusSeparator" />
+        <TextBlock DockPanel.Dock="Left" Classes="statusItem" Text="{Binding CharacterCountText}" />
+
+        <Button DockPanel.Dock="Right" Classes="statusItem" x:Name="EncodingButton"
+                Content="{Binding EncodingText}" ToolTip.Tip="编码" Click="OnEncodingButtonClick" />
+        <Border DockPanel.Dock="Right" Classes="statusSeparator" />
+        <Button DockPanel.Dock="Right" Classes="statusItem" x:Name="LineEndingButton"
+                Content="{Binding LineEndingText}" ToolTip.Tip="换行符" Click="OnLineEndingButtonClick" />
+        <Border DockPanel.Dock="Right" Classes="statusSeparator" />
+        <Button DockPanel.Dock="Right" Classes="statusItem"
+                Content="{Binding ZoomText}" ToolTip.Tip="缩放（点击还原）" Click="OnZoomResetClick" />
+      </DockPanel>
+    </Border>
+  </Grid>
+</Window>
