@@ -18,6 +18,9 @@ public partial class App : Application
 
     public static AppSettings Settings { get; internal set; } = new();
 
+    /// <summary>安装后第一次启动（由安装包设置）：主窗口显示“安装完成”对话框。</summary>
+    public static bool IsFirstRunAfterInstall { get; set; }
+
     /// <summary>用户确认过的文件编码（下次打开时直接使用）。</summary>
     public static EncodingMemory EncodingMemory { get; internal set; } = new(storePath: null);
 

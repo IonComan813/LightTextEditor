@@ -61,6 +61,8 @@
                     ToolTip.Tip="把当前文件从原位置移动到笔记库" />
           <MenuItem Header="打开笔记库文件夹(_D)" Click="OnOpenLibraryFolderClick" />
           <MenuItem Header="更改笔记库位置…" Click="OnChangeLibraryClick" />
+          <MenuItem Header="设为默认程序…" x:Name="DefaultAppsMenuItem" Click="OnDefaultAppsClick"
+                    ToolTip.Tip="打开 Windows“默认应用”设置，选择用 LightTextEditor 打开哪些文件" />
           <Separator />
           <MenuItem Header="关闭标签页(_C)" InputGesture="Ctrl+W" Click="OnCloseTabClick" />
           <MenuItem Header="退出(_X)" Click="OnExitClick" />

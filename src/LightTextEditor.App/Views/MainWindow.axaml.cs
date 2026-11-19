@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DefaultAppsMenuItem.IsVisible = OperatingSystem.IsWindows(); // 文件关联只在 Windows 上有
         DataContext = _vm;
         // 不在前台时少占资源（见 Services/BackgroundMode.cs）
         BackgroundMode = new BackgroundMode(this);
@@ -187,6 +188,25 @@ public partial class MainWindow : Window
         }
         else if (AllTabs().Count == 0)
             NewDocument();
+
+        // 安装后第一次启动：“安装完成”对话框（窗口显示出来之后）
+        if (App.IsFirstRunAfterInstall)
+        {
+            App.IsFirstRunAfterInstall = false;
+            void ShowInstalled(object? sender, EventArgs e)
+            {
+                Opened -= ShowInstalled;
+                _ = ShowInstalledAsync();
+            }
+            if (IsVisible) _ = ShowInstalledAsync();
+            else Opened += ShowInstalled;
+        }
+    }
+
+    /// <summary>“安装完成”对话框；勾选了选框就在关闭后打开 Windows 默认应用设置。</summary>
+    internal async Task ShowInstalledAsync()
+    {
+        if (await Dialogs.ShowInstalledAsync(this)) FileAssociations.OpenDefaultAppsSettings();
     }
 
     /// <summary>打开命令行传入的文件；一个都没打开（如文件不存在）时留一个空白标签页。</summary>
@@ -1177,7 +1197,7 @@ public partial class MainWindow : Window
         if (!_closeConfirmed && AllTabs().Any(t => t.Doc.IsDirty))
         {
             e.Cancel = true;
-            if (!Dialogs.IsOpen) _ = ConfirmCloseAsync();
+            if (!Dialogs.IsOpenFor(this)) _ = ConfirmCloseAsync();
             return;
         }
 

@@ -43,4 +43,24 @@ public class FileTypesTests
 
     [Fact]
     public void FreshSettings_DefaultToTxt() => Assert.Equal(".txt", JsonStore.LoadSettings("/nonexistent/x.json").DefaultExtension);
+
+    [Fact]
+    public void OpenWith_IsNormalized_Unique_AndCoversKnownTypes()
+    {
+        Assert.All(FileTypes.OpenWith, ext =>
+        {
+            Assert.StartsWith(".", ext);
+            Assert.Equal(ext.ToLowerInvariant(), ext);
+            Assert.DoesNotContain(" ", ext);
+        });
+        Assert.Equal(FileTypes.OpenWith.Count, FileTypes.OpenWith.Distinct().Count());
+        Assert.Contains(".txt", FileTypes.OpenWith);
+        Assert.Contains(".md", FileTypes.OpenWith);
+        // 程序认识的类型都能从“打开方式”打开
+        Assert.All(FileTypes.Common, t => Assert.Contains(t.Extension, FileTypes.OpenWith));
+        // 不包含双击就会导入 / 执行、危险性较高的类型
+        Assert.DoesNotContain(".reg", FileTypes.OpenWith);
+        Assert.DoesNotContain(".vbs", FileTypes.OpenWith);
+        Assert.DoesNotContain(".exe", FileTypes.OpenWith);
+    }
 }

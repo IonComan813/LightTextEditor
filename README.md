@@ -21,6 +21,7 @@
 - 标签页可以拖动排序，右键有关闭其他、复制路径等菜单；标签放不下时两端有滚动按钮；打开文件总是放在新标签页中
 - “查看 → 居中布局”：正文（含 Markdown 预览）显示在窗口中间固定宽度的页面上，类似 Word；不开时代码和纯文本铺满窗口，Markdown 靠左、宽度不超过页面宽度
 - 外部修改检测、会话恢复、单实例（从资源管理器打开的文件会进入已打开的窗口）
+- Windows 安装包：右键“打开方式”中可以选择本程序打开文本 / Markdown / 代码文件，也可以在系统“默认应用”中设为默认程序
 - 资源占用低：Markdown 只加载代码块用到的语法、预览相关的组件在第一次预览时才加载；窗口在后台时回收内存，Windows 上进入效率模式（EcoQoS）
 
 开发计划见 [docs/ROADMAP.md](docs/ROADMAP.md)。
@@ -47,14 +48,22 @@ dotnet publish src/LightTextEditor.App -c Release -r win-x64 --self-contained fa
 
 ## 发版
 
-GitHub Actions（`.github/workflows/release.yml`）自动构建 Windows 安装包：基于 [Velopack](https://velopack.io/) 的单个
-`LightTextEditor-win-Setup.exe`（自带 .NET 运行时，用户不需要另装），附加到对应的 Release。
+GitHub Actions（`.github/workflows/release.yml`）自动构建两种 Windows 安装包（基于 [Velopack](https://velopack.io/)，都是单个文件），附加到对应的 Release：
+
+| 文件 | 说明 |
+|------|------|
+| `LightTextEditor-win-Setup.exe` | 自带 .NET 运行时，不需要另装任何东西（约 75 MB） |
+| `LightTextEditor-win-slim-Setup.exe` | 不含 .NET（约 40 MB）；电脑上没有 .NET 10 桌面运行时时，安装程序会自动下载安装（需要联网，可能请求管理员权限） |
 
 - **推送版本标签**（如 `v1.2.3`、`v1.2.3-beta.1`）：构建后附加到该标签的 Release；还没有 Release 时自动创建草稿，检查后手动发布。
 - **在网页上发布 Release**（Draft a new release → 填写新标签 → Publish release）：构建并附加到这个 Release，大约 10 分钟后出现。
   GitHub 不会为“保存为草稿”触发工作流，要在发布时才开始构建；想先看到安装包再发布，就先推送标签。
 
-版本号必须是 `主.次.修订` 格式（可带 `v` 前缀和预发布后缀）。安装包未做代码签名，第一次运行时 Windows SmartScreen 可能提示“未知发布者”。
+版本号必须是 `主.次.修订` 格式（可带 `v` 前缀和预发布后缀），最小 0.0.1。安装包未做代码签名，第一次运行时 Windows SmartScreen 可能提示“未知发布者”。
+
+安装后：.txt、.md 和常见代码文件（列表见 `FileTypes.OpenWith`）的右键“打开方式”菜单中会出现本程序，原来的默认程序不变；
+本程序也会出现在“设置 → 应用 → 默认应用”中。安装后第一次启动时有“安装完成”对话框，勾选选框后关闭即打开默认应用设置
+（Velopack 的安装程序本身没有可定制的界面）。以后也可以用“文件 → 设为默认程序”。卸载时这些登记一并删除。
 
 ## 目录结构
 
