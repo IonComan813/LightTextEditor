@@ -140,6 +140,8 @@ public partial class MainWindow
     {
         var doc = DocumentViewModel.FromFile(path, loaded);
         var tab = AddTab(doc, select); // 总是在新标签页中打开（当前的空白标签页保留）
+        // 编码待确认的提示条常驻：被其他提示替换、或保存后，只要还没点 ✓ 就重新显示
+        doc.StandingNotice = () => doc.Encoding.IsCertain ? null : EncodingNotice(tab);
         doc.Notice = EncodingNotice(tab);
         if (doc.Notice is null && loaded.HasMixedLineEndings)
             doc.Notice = new DocumentNotice("换行符不一致",
@@ -149,8 +151,8 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 编码"待确认"或有无法识别的字节时的提示条：[✓] [换一个编码▾]。点 ✓ 后再询问是否转换为 UTF-8
-    /// （见 <see cref="ConfirmEncoding"/>）。不需要提示时返回 null。
+    /// 编码"待确认"时的常驻提示条：[更换编码重试▾] [✓]，不能关闭，直到用户点 ✓（见 <see cref="ConfirmEncoding"/>，
+    /// 之后再询问是否转换为 UTF-8）。编码确定但有无法识别的字节时显示可关闭的警告。不需要提示时返回 null。
     /// </summary>
     private DocumentNotice? EncodingNotice(DocumentTab tab)
     {
@@ -160,37 +162,63 @@ public partial class MainWindow
         if (!uncertain && !doc.HasUndecodableBytes) return null;
 
         var enc = doc.Encoding.Description;
+        const string hint = "显示正常请点 ✓，出现乱码请更换编码重试。";
         string message = !uncertain
-            ? $"有部分字节无法按 {enc} 识别（显示为 �），按此编码保存会改变它们。可以换一个编码重新打开。"
-            : detection?.Method switch
-            {
-                DetectionMethod.Manual => $"已按 {enc} 重新打开，显示是否正常？",
-                DetectionMethod.Statistical when detection.ConfidenceText is { } c => $"检测为 {enc}（置信度 {c}），显示是否正常？",
-                DetectionMethod.CjkHeuristic => $"推测为 {enc}，显示是否正常？",
-                _ => $"无法判断编码，已按 {enc} 打开。显示是否正常？",
-            } + (doc.HasUndecodableBytes ? "\n有部分字节无法按此编码识别（显示为 �）。" : "");
+            ? $"有部分字节无法按 {enc} 识别（显示为 �），按此编码保存会改变它们。可以更换编码重试。"
+            : (doc.HasSwitchedEncoding
+                ? $"已按 {enc} 重新打开。显示正常请点 ✓。"
+                : detection?.Method switch
+                {
+                    DetectionMethod.Statistical when detection.ConfidenceText is { } c => $"检测为 {enc}（置信度 {c}）。{hint}",
+                    DetectionMethod.CjkHeuristic => $"推测为 {enc}。{hint}",
+                    _ => $"无法判断编码，暂按 {enc} 显示。{hint}",
+                })
+              + (doc.HasUndecodableBytes ? "\n有部分字节无法按此编码识别（显示为 �）。" : "");
 
-        var actions = new List<NoticeAction>();
+        // 第一次显示"更换编码重试"；用户换过一次编码后，显示当前编码名
+        var actions = new List<NoticeAction>
+        {
+            new(doc.HasSwitchedEncoding ? enc : "更换编码重试", () => { }) { Children = ReopenChoices(doc, dimCurrent: true) },
+        };
         if (uncertain)
             actions.Add(new NoticeAction("显示正常", () => ConfirmEncoding(doc)) { Icon = NoticeIcon.Checkmark });
-        actions.Add(new NoticeAction("换一个编码", () => { }) { Children = ReopenChoices(doc) });
 
-        return new DocumentNotice(uncertain ? "请确认编码" : "有无法识别的字节", message, NoticeSeverity.Warning, actions);
+        return uncertain
+            ? new DocumentNotice("请确认当前文件的编码格式", message, NoticeSeverity.Warning, actions) { IsClosable = false }
+            : new DocumentNotice("有无法识别的字节", message, NoticeSeverity.Warning, actions);
     }
 
-    /// <summary>"换一个编码"的选项：当前编码打勾，这次打开以来试过的显示为灰色（仍可选择）。</summary>
-    private IReadOnlyList<NoticeAction> ReopenChoices(DocumentViewModel doc) =>
-    [
-        .. ReopenEncodings.Select(e =>
+    /// <summary>
+    /// "更换编码重试"的选项：常用编码，再加上检测时考虑过、但不在常用列表里的编码。当前编码打勾；
+    /// 这次打开以来试过的（包括打开前检测考虑过的）显示为灰色，仍可选择。
+    /// <paramref name="dimCurrent"/> 为 false 时当前编码不变灰（顶部菜单、状态栏菜单）。
+    /// </summary>
+    private IReadOnlyList<NoticeAction> ReopenChoices(DocumentViewModel doc, bool dimCurrent)
+    {
+        var choices = ReopenEncodings.Select(e => (e.Name, e.Create)).ToList();
+        foreach (var cp in doc.TriedCodePages)
         {
-            int codePage = e.Create().CodePage;
-            return new NoticeAction(e.Name, () => _ = ReopenWithEncodingAsync(doc, e.Create()))
+            if (choices.Any(c => c.Create().CodePage == cp)) continue;
+            TextEncoding extra;
+            try { extra = TextEncoding.FromCodePage(cp); }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException) { continue; }
+            choices.Add((extra.Description, () => extra));
+        }
+
+        return
+        [
+            .. choices.Select(c =>
             {
-                IsChecked = codePage == doc.Encoding.CodePage,
-                IsDimmed = doc.TriedCodePages.Contains(codePage),
-            };
-        }),
-    ];
+                int codePage = c.Create().CodePage;
+                bool isCurrent = codePage == doc.Encoding.CodePage;
+                return new NoticeAction(c.Name, () => _ = ReopenWithEncodingAsync(doc, c.Create()))
+                {
+                    IsChecked = isCurrent,
+                    IsDimmed = doc.TriedCodePages.Contains(codePage) && (dimCurrent || !isCurrent),
+                };
+            }),
+        ];
+    }
 
     /// <summary>
     /// 用户确认当前编码显示正常：记入编码记录（下次直接使用，不改动文件），
@@ -318,8 +346,9 @@ public partial class MainWindow
         {
             doc.SaveTo(path, encoding);
             // 编码记录：UTF-8 / 带 BOM 的文件能自我识别，不需要；其他编码记下来，下次打开不必再猜
+            // 还在"待确认"的编码不记录（等用户点 ✓）
             if (doc.Encoding.IsUnicode) App.EncodingMemory.Forget(path);
-            else App.EncodingMemory.Remember(path, doc.Encoding);
+            else if (doc.Encoding.IsCertain) App.EncodingMemory.Remember(path, doc.Encoding);
             return true;
         }
         catch (EncodingLossException ex)

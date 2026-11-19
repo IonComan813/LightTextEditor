@@ -207,6 +207,19 @@ public class EncodingDetectorTests
         Assert.Equal(sb.ToString(), r.Text);
     }
 
+    [Fact]
+    public void Candidates_ListEncodingsConsidered_EndingWithTheChosenOne()
+    {
+        // 4 字节 GBK：UTF-8 校验失败 → 统计检测 KOI8-R（置信度太低）→ 结构推测 GB18030
+        Assert.Equal([65001, 20866, 54936], TextFileIO.Decode(Bytes("中文", 936)).Detection.Candidates);
+        // 较长的 GBK：UTF-8 校验失败 → 统计检测 GB18030
+        Assert.Equal([65001, 54936], TextFileIO.Decode(Bytes("这是一个用于测试编码检测的简体中文段落，内容足够长以便统计检测。", 936)).Detection.Candidates);
+        // 确定的结果只有它自己
+        Assert.Equal([65001], TextFileIO.Decode("ascii"u8.ToArray()).Detection.Candidates);
+        // .editorconfig 说是 UTF-8 但内容不是：UTF-8 只记一次
+        Assert.Equal([65001, 54936], TextFileIO.Decode(Bytes("这是一个用于测试编码检测的简体中文段落，内容足够长以便统计检测。", 936), editorConfigCharset: "utf-8").Detection.Candidates);
+    }
+
     [Theory]
     [InlineData("gbk", 54936)]
     [InlineData("GB2312", 54936)]

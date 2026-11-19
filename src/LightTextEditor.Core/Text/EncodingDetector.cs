@@ -34,6 +34,19 @@ public enum DetectionMethod
 /// </summary>
 public sealed record EncodingDetection(TextEncoding Encoding, DetectionMethod Method, double Confidence, bool IsLossless)
 {
+    /// <summary>
+    /// 检测过程中考虑过的编码（代码页），最后一个是采用的编码。
+    /// 例如 GBK 短文本：[UTF-8（校验失败）, 统计检测给出的 KOI8-R（置信度太低）, GB18030]。
+    /// 界面上"更换编码重试"的列表把它们显示为灰色。没有设置时只有采用的编码。
+    /// </summary>
+    public IReadOnlyList<int> Candidates
+    {
+        get => _candidates ?? [Encoding.CodePage];
+        init => _candidates = value;
+    }
+
+    private readonly IReadOnlyList<int>? _candidates;
+
     /// <summary>适合显示的置信度，如 "62%"；不是统计检测时为 null。</summary>
     public string? ConfidenceText => Method == DetectionMethod.Statistical ? $"{Math.Round(Confidence * 100)}%" : null;
 }
@@ -91,30 +104,51 @@ public static class EncodingDetector
         if (isValidUtf8)
             return new EncodingDetection(TextEncoding.Utf8(withBom: false), DetectionMethod.Utf8, 1, true);
 
+        // 以下各步的结果都可能"待确认"：记下考虑过的编码，供用户更换编码时参考
+        var candidates = new List<int> { 65001 }; // UTF-8 校验已失败
+        if (editorConfigCharset is not null && EditorConfig.CharsetToEncoding(editorConfigCharset) is { } rejected)
+            Consider(rejected.CodePage);
+        void Consider(int codePage)
+        {
+            if (!candidates.Contains(codePage)) candidates.Add(codePage);
+        }
+        EncodingDetection Result(TextEncoding enc, DetectionMethod method, double conf, bool lossless)
+        {
+            candidates.Remove(enc.CodePage);
+            candidates.Add(enc.CodePage);
+            return new EncodingDetection(enc, method, conf, lossless) { Candidates = candidates };
+        }
+
         // 5. 统计检测
         var sample = bytes.Length > SampleSize ? bytes.AsSpan(0, TrimToCharBoundary(bytes, SampleSize)).ToArray() : bytes;
         var (statistical, confidence) = DetectStatistically(sample);
-        if (statistical is not null && confidence >= CertainConfidence && RoundTrips(bytes, statistical))
-            return new EncodingDetection(statistical, DetectionMethod.Statistical, confidence, true);
+        if (statistical is not null)
+        {
+            if (confidence >= CertainConfidence && RoundTrips(bytes, statistical))
+                return Result(statistical, DetectionMethod.Statistical, confidence, true);
+            Consider(statistical.CodePage);
+        }
 
         // 6. 统计检测不可靠（多为短文本）：按双字节结构推测简体 / 繁体中文，再退回统计检测的结果
         var stats = CjkStats.Analyze(sample);
         if (stats.LooksLikeGb2312)
         {
             var gb = TextEncoding.Gb18030(isCertain: false);
-            if (RoundTrips(bytes, gb)) return new EncodingDetection(gb, DetectionMethod.CjkHeuristic, 0, true);
+            if (RoundTrips(bytes, gb)) return Result(gb, DetectionMethod.CjkHeuristic, 0, true);
+            Consider(gb.CodePage);
         }
         if (stats.LooksLikeBig5)
         {
             var big5 = TextEncoding.FromCodePage(950, isCertain: false);
-            if (RoundTrips(bytes, big5)) return new EncodingDetection(big5, DetectionMethod.CjkHeuristic, 0, true);
+            if (RoundTrips(bytes, big5)) return Result(big5, DetectionMethod.CjkHeuristic, 0, true);
+            Consider(big5.CodePage);
         }
         if (statistical is not null && RoundTrips(bytes, statistical))
-            return new EncodingDetection(statistical with { IsCertain = false }, DetectionMethod.Statistical, confidence, true);
+            return Result(statistical with { IsCertain = false }, DetectionMethod.Statistical, confidence, true);
 
         // 7. 回退
         var fallback = TextEncoding.Gb18030(isCertain: false);
-        return new EncodingDetection(fallback, DetectionMethod.Fallback, 0, RoundTrips(bytes, fallback));
+        return Result(fallback, DetectionMethod.Fallback, 0, RoundTrips(bytes, fallback));
     }
 
     /// <summary>识别 BOM；没有时返回 null。</summary>

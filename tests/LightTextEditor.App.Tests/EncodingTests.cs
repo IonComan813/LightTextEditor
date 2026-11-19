@@ -38,6 +38,12 @@ public class EncodingTests
     private static NoticeAction Action(DocumentViewModel doc, string label) =>
         Assert.Single(doc.Notice!.Actions, a => a.Label == label);
 
+    /// <summary>提示条上"更换编码重试"下拉按钮（换过编码后它的文字是当前编码名）。</summary>
+    private static NoticeAction Switcher(DocumentViewModel doc) => Assert.Single(doc.Notice!.Actions, a => a.Children is not null);
+
+    private static NoticeAction Choice(DocumentViewModel doc, string prefix) =>
+        Assert.Single(Switcher(doc).Children!, c => c.Label.StartsWith(prefix));
+
     private static FAContentDialog? FindDialog(MainWindow window)
     {
         Dispatcher.UIThread.RunJobs();
@@ -49,34 +55,87 @@ public class EncodingTests
     private const string LongGbk = "这是一个用于测试编码检测的简体中文段落。它包含常用的汉字、标点符号，以及数字和英文。";
 
     [AvaloniaFact]
-    public async Task UncertainEncoding_ShowsConfirmationBar_WithCheckmarkAndChoices()
+    public async Task UncertainEncoding_ShowsPersistentBar_SwitcherThenCheckmark()
     {
         var (window, library) = CreateWindow();
         var path = WriteFile(library, "short.txt", Encoding.GetEncoding(936).GetBytes("你好世界"));
 
         await window.OpenFilesAsync([path]);
         var doc = window.ActiveTab!.Doc;
-        Assert.Equal("请确认编码", doc.Notice?.Title);
-        Assert.Contains("GB18030（简体中文）", doc.Notice!.Message);
-        Assert.Equal(["显示正常", "换一个编码"], doc.Notice.Actions.Select(a => a.Label));
+        Assert.Equal("请确认当前文件的编码格式", doc.Notice?.Title);
+        Assert.False(doc.Notice!.IsClosable);
+        Assert.Contains("GB18030（简体中文）", doc.Notice.Message);
+        Assert.Equal(["更换编码重试", "显示正常"], doc.Notice.Actions.Select(a => a.Label));
         Assert.Equal(NoticeIcon.Checkmark, Action(doc, "显示正常").Icon);
 
-        var choices = Action(doc, "换一个编码").Children!;
-        Assert.Contains(choices, c => c.Label.StartsWith("Big5"));
-        Assert.StartsWith("GB18030", Assert.Single(choices, c => c.IsChecked).Label);
-        Assert.StartsWith("GB18030", Assert.Single(choices, c => c.IsDimmed).Label); // 打开时用的编码算"试过"
+        // 检测时考虑过的（UTF-8 校验失败）和打开时采用的编码都是灰色，仍可选择
+        var choices = Switcher(doc).Children!;
+        Assert.Contains(choices, c => c.Label.StartsWith("Big5") && !c.IsDimmed);
+        var current = Assert.Single(choices, c => c.IsChecked);
+        Assert.StartsWith("GB18030", current.Label);
+        Assert.True(current.IsDimmed);
+        Assert.True(Choice(doc, "UTF-8").IsDimmed);
 
-        // 提示条：✓ 按钮（只有图标，提示文字"显示正常"）+ 下拉按钮
+        // 提示条：下拉按钮在左，✓ 按钮（只有图标，提示文字"显示正常"）在右，没有关闭按钮
         Dispatcher.UIThread.RunJobs();
         Assert.True(window.FindControl<Border>("NoticeHost")!.IsVisible);
         var bar = window.FindControl<FAInfoBar>("NoticeBar")!;
+        Assert.False(bar.IsClosable);
         var buttons = Assert.IsType<StackPanel>(bar.Content).Children;
-        var check = Assert.IsType<Button>(buttons[0]);
+        var dropDown = Assert.IsType<DropDownButton>(buttons[0]);
+        Assert.Equal("更换编码重试", dropDown.Content);
+        Assert.Equal(choices.Count, ((MenuFlyout)dropDown.Flyout!).Items.Count);
+        var check = Assert.IsType<Button>(buttons[1]);
         Assert.IsType<FASymbolIcon>(check.Content);
         Assert.Equal("显示正常", ToolTip.GetTip(check));
-        var dropDown = Assert.IsType<DropDownButton>(buttons[1]);
-        Assert.Equal("换一个编码", dropDown.Content);
-        Assert.Equal(ReopenCount, ((MenuFlyout)dropDown.Flyout!).Items.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task EncodingsConsideredByDetection_AreListedAndDimmed()
+    {
+        var (window, library) = CreateWindow();
+        // 4 字节的 GBK"中文"：统计检测给出 KOI8-R（置信度太低，未采用），最后按结构推测为 GB18030
+        var path = WriteFile(library, "tiny.txt", Encoding.GetEncoding(936).GetBytes("中文"));
+        await window.OpenFilesAsync([path]);
+        var doc = window.ActiveTab!.Doc;
+
+        Assert.Equal([65001, 20866, 54936], doc.TriedCodePages);
+        var choices = Switcher(doc).Children!;
+        Assert.Equal(ReopenCount + 1, choices.Count);
+        var koi8 = choices[^1]; // 不在常用列表里的编码追加在后面
+        Assert.Equal("KOI8-R（西里尔文）", koi8.Label);
+        Assert.True(koi8.IsDimmed);
+    }
+
+    [AvaloniaFact]
+    public async Task PersistentBar_ComesBack_AfterOtherNotices_AndSaving_UntilCheckmark()
+    {
+        var (window, library) = CreateWindow();
+        var original = Encoding.GetEncoding(936).GetBytes("你好世界");
+        var path = WriteFile(library, "stay.txt", original);
+        await window.OpenFilesAsync([path]);
+        var tab = window.ActiveTab!;
+        var bar = tab.Doc.Notice;
+
+        // 其他提示暂时替换它，关闭后恢复
+        tab.Doc.Notice = new DocumentNotice("别的提示", "", NoticeSeverity.Informational, []);
+        tab.Doc.Notice = null;
+        Assert.Equal("请确认当前文件的编码格式", tab.Doc.Notice?.Title);
+
+        // 保存不算确认：仍按原编码写回，提示条还在，也不记入编码记录
+        tab.Editor.Document.Insert(tab.Editor.Document.TextLength, "！");
+        Assert.True(await window.SaveActiveAsync());
+        Assert.Equal(Encoding.GetEncoding(936).GetBytes("你好世界！"), File.ReadAllBytes(path));
+        Assert.False(tab.Doc.Encoding.IsCertain);
+        Assert.Equal("请确认当前文件的编码格式", tab.Doc.Notice?.Title);
+        Assert.Null(App.EncodingMemory.Get(path));
+
+        // 点 ✓ 后才消失（换成是否转换为 UTF-8 的询问，那个可以关闭）
+        Action(tab.Doc, "显示正常").Execute();
+        Assert.Equal("编码已确认", tab.Doc.Notice?.Title);
+        Assert.True(tab.Doc.Notice!.IsClosable);
+        tab.Doc.Notice = null;
+        Assert.Null(tab.Doc.Notice);
     }
 
     [AvaloniaFact]
@@ -119,22 +178,26 @@ public class EncodingTests
         int guessed = doc.Encoding.CodePage;
 
         // 先试 Shift-JIS，再试 Big5
-        Assert.Single(Action(doc, "换一个编码").Children!, c => c.Label.StartsWith("Shift-JIS")).Execute();
+        Assert.Equal("更换编码重试", Switcher(doc).Label);
+        Choice(doc, "Shift-JIS").Execute();
         Dispatcher.UIThread.RunJobs();
-        Assert.Single(Action(doc, "换一个编码").Children!, c => c.Label.StartsWith("Big5")).Execute();
+        Assert.Equal("Shift-JIS（日文）", Switcher(doc).Label); // 换过一次后显示当前编码名
+        Choice(doc, "Big5").Execute();
         Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Big5（繁体中文）", Switcher(doc).Label);
         Assert.Equal("中文", doc.Document.Text);
         Assert.Equal(950, doc.Encoding.CodePage);
 
         // 换了编码后仍要点 ✓ 确认，确认前不记录
         Assert.False(doc.Encoding.IsCertain);
-        Assert.Equal("请确认编码", doc.Notice?.Title);
+        Assert.Equal("请确认当前文件的编码格式", doc.Notice?.Title);
         Assert.StartsWith("已按 Big5（繁体中文） 重新打开", doc.Notice!.Message);
         Assert.Null(App.EncodingMemory.Get(path));
 
-        // 打开时猜的编码和试过的两个都是灰色，但仍然可以选择
-        Assert.Equal([guessed, 950, 932], doc.TriedCodePages);
-        var dimmed = Action(doc, "换一个编码").Children!.Where(c => c.IsDimmed).Select(c => c.Label.Split('（')[0]).ToList();
+        // 检测时考虑过的、打开时猜的和试过的两个都是灰色，但仍然可以选择
+        Assert.Contains(65001, doc.TriedCodePages);
+        Assert.Equal([guessed, 932, 950], doc.TriedCodePages.Skip(doc.TriedCodePages.Count - 3));
+        var dimmed = Switcher(doc).Children!.Where(c => c.IsDimmed).Select(c => c.Label.Split('（')[0]).ToList();
         Assert.Contains("Big5", dimmed);
         Assert.Contains("Shift-JIS", dimmed);
 
@@ -166,10 +229,13 @@ public class EncodingTests
         var reopen = Assert.Single(items, i => (string?)i.Header == "以其他编码重新打开");
         Assert.True(reopen.IsEnabled);
         Assert.Equal(ReopenCount, reopen.Items.Count);
+        // 顶部菜单：当前编码打勾但不变灰；检测时试过的 UTF-8 变灰，仍可选择
         var gb = reopen.Items.OfType<MenuItem>().Single(i => ((string)i.Header!).StartsWith("GB18030"));
         Assert.True(gb.IsChecked);
-        Assert.Contains("dimmed", gb.Classes);
-        Assert.True(gb.IsEnabled);
+        Assert.DoesNotContain("dimmed", gb.Classes);
+        var utf8Item = reopen.Items.OfType<MenuItem>().Single(i => (string?)i.Header == "UTF-8");
+        Assert.Contains("dimmed", utf8Item.Classes);
+        Assert.True(utf8Item.IsEnabled);
         Assert.Contains(items, i => (string?)i.Header == "以其他编码保存");
         Assert.True(Assert.Single(items, i => (string?)i.Header == "转换为 UTF-8").IsEnabled);
 
@@ -233,7 +299,8 @@ public class EncodingTests
         await window.OpenFilesAsync([path]);
         var tab = window.ActiveTab!;
         Assert.Equal("有无法识别的字节", tab.Doc.Notice?.Title);
-        Assert.Equal(["换一个编码"], tab.Doc.Notice!.Actions.Select(a => a.Label));
+        Assert.Equal(["更换编码重试"], tab.Doc.Notice!.Actions.Select(a => a.Label));
+        Assert.True(tab.Doc.Notice.IsClosable);
 
         var save = window.SaveActiveAsync();
         var dialog = FindDialog(window)!;

@@ -32,8 +32,33 @@ public sealed partial class DocumentViewModel : ObservableObject
     /// <summary>文件中有无法按打开时的编码识别的字节（显示为 �），保存会改变它们。</summary>
     public bool HasUndecodableBytes => Detection is { IsLossless: false };
 
-    /// <summary>这次打开以来用过的编码（代码页），"换一个编码"菜单里把它们显示为灰色。</summary>
-    public HashSet<int> TriedCodePages { get; } = [];
+    private readonly List<int> _triedCodePages = [];
+
+    /// <summary>
+    /// 这次打开以来试过的编码（代码页，按先后顺序）：打开时检测考虑过的、打开时采用的、之后用户换过的。
+    /// "更换编码重试"列表把它们显示为灰色。
+    /// </summary>
+    public IReadOnlyList<int> TriedCodePages => _triedCodePages;
+
+    /// <summary>用户是否已经用"更换编码重试"换过编码（之后下拉按钮显示当前编码名，不再显示"更换编码重试"）。</summary>
+    public bool HasSwitchedEncoding { get; private set; }
+
+    private void MarkTried(IEnumerable<int> codePages)
+    {
+        foreach (var cp in codePages)
+            if (!_triedCodePages.Contains(cp)) _triedCodePages.Add(cp);
+    }
+
+    /// <summary>
+    /// 常驻提示：<see cref="Notice"/> 被清空（其他提示关闭、保存后等）时，用它的返回值补上。
+    /// 用于"请确认当前文件的编码格式"，直到用户点 ✓ 为止。
+    /// </summary>
+    public Func<DocumentNotice?>? StandingNotice { get; set; }
+
+    partial void OnNoticeChanged(DocumentNotice? value)
+    {
+        if (value is null && StandingNotice?.Invoke() is { } standing) Notice = standing;
+    }
 
     [ObservableProperty]
     private LineEnding _lineEnding;
@@ -89,7 +114,8 @@ public sealed partial class DocumentViewModel : ObservableObject
         var doc = new DocumentViewModel(loaded.Text, Path.GetFullPath(path), loaded.Encoding, loaded.LineEnding, Path.GetExtension(path));
         doc.KnownWriteTimeUtc = TryGetWriteTime(path);
         doc.Detection = loaded.Detection;
-        doc.TriedCodePages.Add(loaded.Encoding.CodePage);
+        doc.MarkTried(loaded.Detection.Candidates);
+        doc.MarkTried([loaded.Encoding.CodePage]);
         return doc;
     }
 
@@ -143,9 +169,11 @@ public sealed partial class DocumentViewModel : ObservableObject
         TextFileIO.Save(path, Document.Text, enc);
 
         FilePath = Path.GetFullPath(path);
-        Encoding = enc with { IsCertain = true };
+        // 按原来"待确认"的编码保存时仍是待确认（要用户点 ✓）；保存为用户明确选择的编码时为确定
+        Encoding = enc;
         KnownWriteTimeUtc = TryGetWriteTime(path);
-        Detection = null;
+        // 写入的字节就是按此编码编码的，不再有无法识别的字节
+        Detection = Detection is null ? null : Detection with { IsLossless = true };
         _hasNonUndoableChanges = false;
         Document.UndoStack.MarkAsOriginalFile();
         RefreshDirty();
@@ -162,7 +190,9 @@ public sealed partial class DocumentViewModel : ObservableObject
         var loaded = forcedEncoding is null
             ? TextFileIO.Load(FilePath, LineEnding, remembered)
             : TextFileIO.DecodeAs(File.ReadAllBytes(FilePath), forcedEncoding, LineEnding, isCertain: false);
-        TriedCodePages.Add(loaded.Encoding.CodePage);
+        MarkTried(loaded.Detection.Candidates);
+        MarkTried([loaded.Encoding.CodePage]);
+        if (forcedEncoding is not null) HasSwitchedEncoding = true;
 
         // 用 Replace 而不是赋值 Text，保留撤销历史（可以撤销"重新加载"）。
         Document.Replace(0, Document.TextLength, loaded.Text);
@@ -200,7 +230,11 @@ public sealed partial class DocumentViewModel : ObservableObject
 public enum NoticeSeverity { Informational, Success, Warning, Error }
 
 /// <summary>编辑区上方的提示条。</summary>
-public sealed record DocumentNotice(string Title, string Message, NoticeSeverity Severity, IReadOnlyList<NoticeAction> Actions);
+public sealed record DocumentNotice(string Title, string Message, NoticeSeverity Severity, IReadOnlyList<NoticeAction> Actions)
+{
+    /// <summary>是否显示关闭按钮（常驻提示为 false）。</summary>
+    public bool IsClosable { get; init; } = true;
+}
 
 public enum NoticeIcon { None, Checkmark }
 

@@ -263,7 +263,7 @@ public partial class MainWindow
         }
 
         var reopen = new MenuItem { Header = "以其他编码重新打开", IsEnabled = doc.FilePath is not null };
-        foreach (var choice in ReopenChoices(doc)) reopen.Items.Add(ChoiceMenuItem(choice));
+        foreach (var choice in ReopenChoices(doc, dimCurrent: false)) reopen.Items.Add(ChoiceMenuItem(choice));
         items.Add(reopen);
 
         var saveWith = new MenuItem { Header = "以其他编码保存" };

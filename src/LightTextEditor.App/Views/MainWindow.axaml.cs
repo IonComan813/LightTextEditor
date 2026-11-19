@@ -982,6 +982,7 @@ public partial class MainWindow : Window
         }
 
         NoticeBar.Title = notice.Title;
+        NoticeBar.IsClosable = notice.IsClosable;
         NoticeBar.Message = notice.Message;
         NoticeBar.Severity = notice.Severity switch
         {
