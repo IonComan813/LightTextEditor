@@ -27,6 +27,9 @@ internal static class Shell
         }
     }
 
+    /// <summary>用系统默认程序打开网址或文件。</summary>
+    public static void Open(string target) => Start(target);
+
     private static void Start(string target)
     {
         try

@@ -13,7 +13,7 @@
 | 1 | 指定目录存储、打开即写、多标签 | ✅ 高 | 低 | FluentAvalonia `TabView` 或 Avalonia 12 自带 TabView | 需要定义"库外文件"如何处理 |
 | 2 | 近期文件列表、时间排序、全文搜索 | ✅ 高 | 中 | SQLite + FTS5 (`Microsoft.Data.Sqlite`) | 中文分词：用 `trigram` 分词器 |
 | 3 | ~~自动保存~~ 手动保存 + 内置版本历史 | ✅ 高 | 中 | SQLite、DiffPlex | 原子写入、保留策略、与外部修改冲突 |
-| 4 | 代码高亮 / MD 源码⇄渲染 / 粘贴图片 | ✅ 高 | 中 | AvaloniaEdit + AvaloniaEdit.TextMate、Markdown.Avalonia | 中文输入法 (IME)、MD 渲染完整度 |
+| 4 | 代码高亮 / MD 源码⇄渲染 / 粘贴图片 | ✅ 高 | 中 | AvaloniaEdit + AvaloniaEdit.TextMate、LiveMarkdown.Avalonia | 中文输入法 (IME)、MD 渲染完整度 |
 | 5 | 编码声明 + 编码检测流程 | ⚠️ 部分可行 | 中 | `UTF.Unknown`、`System.Text.Encoding.CodePages` | **不建议往文件内容里写声明**，改为元数据 + BOM 策略 |
 | 6 | Fluent Design / Windows 风 | ✅ 高 | 低~中 | Avalonia FluentTheme、FluentAvalonia、Mica | FluentAvalonia 对 Avalonia 12 的支持需确认 |
 | 7 | 本地加密 + Windows Hello | ✅ 可行（需改设计） | 高 | AES-GCM、DPAPI / NCrypt (Hello 密钥)、Argon2id | `UserConsentVerifier` 只验证身份、不产生密钥 |
@@ -64,8 +64,8 @@
 - **编辑器核心**：`Avalonia.AvaloniaEdit`（AvalonEdit 的 Avalonia 移植，官方维护，已有 12.0.0 版本）。自带查找替换面板、折叠、行号、大文件性能尚可（几 MB 没问题；上百 MB 需要"大文件只读模式"）。
 - **语法高亮**：`AvaloniaEdit.TextMate` + `TextMateSharp.Grammars`，直接使用 VS Code 的 TextMate 语法和主题（Dark+/Light+ 等），覆盖几十种语言，按扩展名自动选择。这正是"现成库"。
 - **Markdown 源码 ⇄ 渲染切换**（如 `Ctrl+E`）：
-  - 渲染用 `Markdown.Avalonia`（原生控件渲染，支持表格、代码块高亮、相对路径图片）；备选 `LiveMarkdown.Avalonia`。
-  - 两者都不支持 LaTeX 公式、Mermaid 等扩展。如需这些，只能走 WebView 路线（Avalonia 官方 WebView 属于付费的 Accelerate；开源方案基于 CEF，体积 +100 MB），**建议 v1 不做**。
+  - **已采用 `LiveMarkdown.Avalonia`**（基于 Markdig 解析，GFM 表格 / 任务列表、TextMate 代码高亮、相对路径图片）。实测对比时 `Markdown.Avalonia` 12.0.2 不识别任务列表、代码块内容为空，故放弃。
+  - LaTeX 公式、Mermaid 图表：LiveMarkdown 有可选扩展包（`LiveMarkdown.Avalonia.Math` / `.Mermaid`），v1 暂不开启，需要时可以直接加上，不必走 WebView。
   - 切换时尽量同步滚动位置（按源码行号映射到渲染块）。
   - 渲染模式为只读。"所见即所得编辑"（类似 Typora）是另一个数量级的工程，**不建议**纳入本项目。
 - **Ctrl+V 粘贴图片**：
@@ -175,7 +175,7 @@ LightTextEditor.sln
 
 - [x] AvaloniaEdit 中**中文输入法**：候选框位置正确、组字过程正常（已人工测试，没有问题）
 - [ ] AvaloniaEdit.TextMate 高亮 C#/Python/JSON，明暗主题切换
-- [ ] Markdown.Avalonia 渲染含表格、代码块、相对路径图片的文档
+- [x] Markdown 渲染含表格、代码块、相对路径图片的文档（改用 LiveMarkdown.Avalonia）
 - [ ] 从剪贴板读取截图（Win+Shift+S）并保存为 PNG
 - [ ] 在 Avalonia 窗口中调用 `UserConsentVerifier`（带窗口句柄），以及 NCrypt Hello 密钥加解密
 - [ ] FluentAvalonia `TabView` 放进标题栏 + Mica
@@ -195,14 +195,15 @@ LightTextEditor.sln
 - [x] 自绘标题栏按钮（替换 Avalonia 12 默认的标题文字 + 四个按钮）：高度与标签栏一致、中文提示、去掉全屏按钮
 - [ ] **待验证（只能在 Windows 上做）**：Mica 效果、标题栏拖动区域、Windows 11 最大化按钮的贴靠布局
 
-### M2 · 代码高亮与 Markdown（2~3 周）
+### M2 · 代码高亮与 Markdown（2~3 周）✅ 已完成
 
-- [ ] TextMate 语法高亮，按扩展名自动选择语言，状态栏可手动切换
-- [ ] Markdown 源码 ⇄ 渲染切换（`Ctrl+E`），滚动位置同步
-- [ ] `Ctrl+V` / 拖放图片 → `assets/` + 插入 `![]()`
-- [ ] 渲染模式下点击链接、打开图片
+- [x] TextMate 语法高亮（VS Code 的 Light+ / Dark+ 配色，跟随主题），按后缀选择语言，改后缀后自动切换
+- [x] Markdown 源码 ⇄ 渲染切换（`Ctrl+E`、状态栏按钮；`Esc` 或双击预览返回编辑），按比例同步滚动位置
+- [x] `Ctrl+V` 粘贴截图 → `assets/笔记名-时间.png` + 插入 `![]()`；粘贴 / 拖入图片文件（文档目录外的图片先复制到 `assets/`）；剪贴板同时有文字时以文字为准
+- [x] 预览中点击链接：网址用浏览器打开，指向其他笔记的相对链接在编辑器中打开
+- [ ] **待验证（只能在 Windows 上做）**：截图工具（Win+Shift+S）放到剪贴板的位图能否被识别
 
-> **到这里就是一个可日常使用的 MVP（约 5~8 周）。**
+> **到这里就是一个可日常使用的 MVP（约 5~8 周）。** ✅ M2 已完成（待 Windows 实机验证）
 
 ### M3 · 编码检测（1~2 周）
 
@@ -248,7 +249,7 @@ LightTextEditor.sln
 |------|------|--------|------|
 | AvaloniaEdit 中文 IME 体验差 | 高 | 中 | M0 第一项验证；必要时向上游提 issue/PR |
 | FluentAvalonia 与 Avalonia 12 兼容性 | 中 | 低 | 已解决：FluentAvalonia 3.1 正式版支持 Avalonia 12 |
-| Markdown 渲染功能不全（公式、Mermaid） | 中 | 高 | v1 明确不支持；后续可选 WebView 插件 |
+| Markdown 渲染功能不全（公式、Mermaid） | 低 | 中 | LiveMarkdown 有可选扩展包，需要时加上即可 |
 | 加密密钥丢失导致数据无法恢复 | **极高** | 低 | 强制设置恢复密码；导出恢复密钥 |
 | 编码误判导致保存后乱码 | 高 | 中 | "待确认"状态不转码 + 无损检查 + 历史快照 |
 | 保存时写坏文件 | 高 | 低 | 原子写入 + 写前快照 |
@@ -260,5 +261,5 @@ LightTextEditor.sln
 
 1. **第 5 条**：不往文件内容里写编码声明；改为"新文件 UTF-8（txt/md 带 BOM）+ 外部元数据记录已确认的编码 + 提供一键转 UTF-8"。
 2. **第 7 条**：Windows Hello 只能作为"解锁方式"，真正加密靠 AES-GCM + 信封密钥；必须设计恢复密码。
-3. **第 4 条**：Markdown 渲染模式为只读预览，不做所见即所得；公式/图表 v1 不支持。
+3. **第 4 条**：Markdown 渲染模式为只读预览，不做所见即所得；公式/图表 v1 暂不开启（有现成扩展包）。
 4. **第 3 条**：取消自动保存，改为手动保存（Ctrl+S），未保存时标签显示 ●。

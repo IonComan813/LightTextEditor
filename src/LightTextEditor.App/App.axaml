@@ -9,12 +9,14 @@
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://LightTextEditor/Styles/WindowDecorations.axaml" />
         <ResourceInclude Source="avares://LightTextEditor/Styles/AppIcon.axaml" />
+        <ResourceInclude Source="avares://LightTextEditor/Styles/MarkdownTheme.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
     <sty:FluentAvaloniaTheme PreferSystemTheme="True" PreferUserAccentColor="True" UseSystemFontOnWindows="True" />
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <StyleInclude Source="avares://LiveMarkdown.Avalonia/Styles.axaml" />
     <StyleInclude Source="avares://LightTextEditor/Styles/AppStyles.axaml" />
   </Application.Styles>
 </Application>

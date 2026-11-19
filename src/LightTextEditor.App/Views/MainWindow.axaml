@@ -79,6 +79,9 @@
           <MenuItem Header="插入日期时间(_D)" InputGesture="F5" Click="OnInsertDateTimeClick" />
         </MenuItem>
         <MenuItem Header="查看(_V)">
+          <MenuItem Header="Markdown 预览(_P)" InputGesture="Ctrl+E" IsEnabled="{Binding IsMarkdown}"
+                    ToggleType="CheckBox" IsChecked="{Binding IsPreviewing, Mode=OneWay}" Click="OnTogglePreviewClick" />
+          <Separator />
           <MenuItem Header="缩放">
             <MenuItem Header="放大" InputGesture="Ctrl+OemPlus" Click="OnZoomInClick" />
             <MenuItem Header="缩小" InputGesture="Ctrl+OemMinus" Click="OnZoomOutClick" />
@@ -123,6 +126,10 @@
         <Button DockPanel.Dock="Right" Classes="statusItem" x:Name="LineEndingButton"
                 Content="{Binding LineEndingText}" ToolTip.Tip="换行符" Click="OnLineEndingButtonClick" />
         <Border DockPanel.Dock="Right" Classes="statusSeparator" />
+        <Button DockPanel.Dock="Right" Classes="statusItem" x:Name="PreviewButton"
+                IsVisible="{Binding IsMarkdown}" Content="{Binding PreviewButtonText}"
+                ToolTip.Tip="在源码和渲染预览之间切换 (Ctrl+E)" Click="OnTogglePreviewClick" />
+        <Border DockPanel.Dock="Right" Classes="statusSeparator" IsVisible="{Binding IsMarkdown}" />
         <Button DockPanel.Dock="Right" Classes="statusItem" x:Name="FileTypeButton"
                 Content="{Binding FileTypeText}" ToolTip.Tip="文件类型（点击更改后缀）" Click="OnFileTypeButtonClick" />
         <Border DockPanel.Dock="Right" Classes="statusSeparator" />

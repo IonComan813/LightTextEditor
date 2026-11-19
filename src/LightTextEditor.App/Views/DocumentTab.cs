@@ -20,6 +20,15 @@ internal sealed class DocumentTab(DocumentViewModel doc, TextEditor editor)
     public DocumentViewModel Doc { get; } = doc;
     public TextEditor Editor { get; } = editor;
 
+    /// <summary>语法高亮（TextMate）。</summary>
+    public AvaloniaEdit.TextMate.TextMate.Installation? Highlighting { get; set; }
+
+    /// <summary>Markdown 预览（第一次切换到预览时创建）。</summary>
+    public MarkdownPreview? Preview { get; set; }
+
+    /// <summary>当前是否显示 Markdown 预览（否则显示源码编辑器）。</summary>
+    public bool IsPreviewing { get; set; }
+
     /// <summary>当前显示这个标签的标签头（标签生成后才有）。</summary>
     public TabHeaderView? Header { get; internal set; }
 

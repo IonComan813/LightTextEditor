@@ -36,6 +36,8 @@ public partial class MainWindow
             (true, true, false, Key.Tab) or (true, false, false, Key.PageUp) => Sync(() => SelectRelative(-1)),
             (false, false, false, Key.F2) => () => _active is null ? Task.CompletedTask : RenameAsync(_active),
             (true, false, false, Key.G) => GoToLineAsync,
+            (true, false, false, Key.E) => Sync(TogglePreview),
+            (false, false, false, Key.Escape) when _active is { IsPreviewing: true } => Sync(TogglePreview),
             (true, false, false, Key.F) => Sync(() => OpenSearch(replace: false)),
             (true, false, false, Key.H) => Sync(() => OpenSearch(replace: true)),
             (false, false, false, Key.F5) => Sync(InsertDateTime),
@@ -110,7 +112,10 @@ public partial class MainWindow
     private void OnRedoClick(object? sender, RoutedEventArgs e) => _active?.Editor.Redo();
     private void OnCutClick(object? sender, RoutedEventArgs e) => _active?.Editor.Cut();
     private void OnCopyClick(object? sender, RoutedEventArgs e) => _active?.Editor.Copy();
-    private void OnPasteClick(object? sender, RoutedEventArgs e) => _active?.Editor.Paste();
+    private async void OnPasteClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is not null) await PasteAsync(_active);
+    }
     private void OnSelectAllClick(object? sender, RoutedEventArgs e) => _active?.Editor.SelectAll();
     private void OnFindClick(object? sender, RoutedEventArgs e) => OpenSearch(replace: false);
     private void OnReplaceClick(object? sender, RoutedEventArgs e) => OpenSearch(replace: true);
@@ -120,6 +125,7 @@ public partial class MainWindow
     private void OpenSearch(bool replace)
     {
         if (_active is null) return;
+        if (_active.IsPreviewing) SetPreview(_active, false); // 查找在源码中进行
         var editor = _active.Editor;
         var panel = editor.SearchPanel;
         if (panel is null) return;

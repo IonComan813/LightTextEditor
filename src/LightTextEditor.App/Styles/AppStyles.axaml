@@ -1,6 +1,27 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="using:FluentAvalonia.UI.Controls">
+        xmlns:ui="using:FluentAvalonia.UI.Controls"
+        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia">
+
+  <!-- Markdown 预览：代码块配色跟随浅色 / 深色主题；中文字体显式列出，避免回退到错误字重 -->
+  <!--
+    字体直接设在文字块上（主题给 TextBlock 设的字体会挡住继承）。
+    中文字体必须显式列出：靠系统回退时，粗体中文会被当成常规字重显示。
+  -->
+  <Style Selector="md|MarkdownTextBlock">
+    <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, PingFang SC, Noto Sans CJK SC, sans-serif" />
+  </Style>
+  <!-- 段落、列表、表格等块之间留出间距 -->
+  <Style Selector="md|MarkdownRenderer StackPanel">
+    <Setter Property="Spacing" Value="10" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer StackPanel.ListItemBlock">
+    <Setter Property="Spacing" Value="4" />
+  </Style>
+  <Style Selector="md|CodeBlock">
+    <Setter Property="ColorTheme" Value="{DynamicResource MarkdownCodeTheme}" />
+    <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Microsoft YaHei UI, Noto Sans Mono CJK SC, monospace" />
+  </Style>
 
   <Styles.Resources>
     <!-- 标签页关闭按钮：自己的模板，悬停高亮不受标签页选中状态的样式影响 -->

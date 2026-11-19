@@ -515,6 +515,28 @@ public partial class MainWindow
         if (files is null || files.Length == 0) return;
         e.Handled = true;
         var paths = files.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray();
-        if (paths.Length > 0) _ = OpenFilesAsync(paths);
+        if (paths.Length == 0) return;
+
+        // 图片：拖进 Markdown 文件就插入图片标签；其他文件照常打开
+        var images = paths.Where(LightTextEditor.Core.Markdown.MarkdownAssets.IsImageFile).ToList();
+        var others = paths.Except(images).ToArray();
+        if (images.Count > 0 && _active is { } tab)
+        {
+            if (IsMarkdown(tab.Doc))
+            {
+                if (tab.IsPreviewing) SetPreview(tab, false);
+                try { InsertImageFiles(tab, images); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _ = Dialogs.ShowErrorAsync(this, "无法插入图片", ex.Message);
+                }
+            }
+            else
+            {
+                ShowTransientNotice(tab.Doc, new DocumentNotice("图片只能插入 Markdown 文件",
+                    "可以在状态栏把文件类型改为 Markdown (.md)。", NoticeSeverity.Informational, []), 6);
+            }
+        }
+        if (others.Length > 0) _ = OpenFilesAsync(others);
     }
 }

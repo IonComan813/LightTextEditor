@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Search;
 using FluentAvalonia.UI.Controls;
+using LightTextEditor.App.Services;
 using LightTextEditor.App.ViewModels;
 using LightTextEditor.Core.Settings;
 using LightTextEditor.Core.Text;
@@ -72,6 +73,11 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
 
         Activated += (_, _) => CheckExternalChanges();
+        ActualThemeVariantChanged += (_, _) =>
+        {
+            foreach (var t in _tabs)
+                if (t.Highlighting is not null) SyntaxHighlighting.ApplyTheme(t.Highlighting);
+        };
         Opened += (_, _) => UpdateBackdrop();
         PropertyChanged += (_, e) =>
         {
@@ -160,10 +166,25 @@ public partial class MainWindow : Window
     {
         var editor = CreateEditor(doc);
         var tab = new DocumentTab(doc, editor);
+        tab.Highlighting = SyntaxHighlighting.Install(editor, doc.Extension);
         doc.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(DocumentViewModel.Notice) && tab == _active) UpdateNoticeBar();
+            if (e.PropertyName == nameof(DocumentViewModel.Extension))
+            {
+                if (tab.Highlighting is not null) SyntaxHighlighting.ApplyLanguage(tab.Highlighting, doc.Extension);
+                if (tab.IsPreviewing && !IsMarkdown(doc)) SetPreview(tab, false);
+            }
         };
+        // Ctrl+V / Shift+Insert：Markdown 文件中可以粘贴图片
+        editor.TextArea.AddHandler(KeyDownEvent, async (_, e) =>
+        {
+            bool paste = (e.Key == Key.V && e.KeyModifiers == KeyModifiers.Control) ||
+                         (e.Key == Key.Insert && e.KeyModifiers == KeyModifiers.Shift);
+            if (!paste || !IsMarkdown(doc)) return;
+            e.Handled = true;
+            await PasteAsync(tab);
+        }, RoutingStrategies.Tunnel);
 
         EditorHost.Children.Add(editor);
         _tabs.Add(tab);
@@ -177,6 +198,8 @@ public partial class MainWindow : Window
         int index = tabs.IndexOf(tab);
         _tabs.Remove(tab);
         EditorHost.Children.Remove(tab.Editor);
+        if (tab.Preview is not null) EditorHost.Children.Remove(tab.Preview);
+        tab.Highlighting?.Dispose();
 
         if (tab == _active)
         {
@@ -206,15 +229,25 @@ public partial class MainWindow : Window
         {
             _active.Doc.CaretOffset = _active.Editor.CaretOffset;
             _active.Editor.IsVisible = false;
+            if (_active.Preview is not null) _active.Preview.IsVisible = false;
         }
 
         _active = tab;
         ApplyViewOptions(tab.Editor); // 后台标签页在切到前台时才同步行号、换行、缩放
-        tab.Editor.IsVisible = true;
+        if (tab.IsPreviewing && tab.Preview is not null)
+        {
+            tab.Preview.SetMarkdown(tab.Doc.Document.Text, DocumentDirectory(tab.Doc));
+            tab.Preview.IsVisible = true;
+        }
+        else
+        {
+            tab.Editor.IsVisible = true;
+        }
         _vm.ActiveDocument = tab.Doc;
+        _vm.IsPreviewing = tab.IsPreviewing;
         UpdateCaretStatus();
         UpdateNoticeBar();
-        FocusEditor();
+        if (tab.IsPreviewing) tab.Preview?.Focus(); else FocusEditor();
         CheckExternalChanges(tab);
     }
 
