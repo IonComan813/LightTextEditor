@@ -33,6 +33,53 @@ internal static class Fonts
         return FontFamily.Default;
     }
 
-    /// <summary>把挑好的字体放进应用资源（键：MarkdownFontFamily）。</summary>
-    public static void Register(Application app) => app.Resources["MarkdownFontFamily"] = PickCjkFontFamily();
+    /// <summary>把挑好的字体放进应用资源（键：MarkdownFontFamily），以及配套的下划线（键：MarkdownUnderline）。</summary>
+    public static void Register(Application app)
+    {
+        var family = PickCjkFontFamily();
+        app.Resources["MarkdownFontFamily"] = family;
+        app.Resources["MarkdownUnderline"] = CreateUnderline(family);
+    }
+
+    /// <summary>
+    /// 连续的下划线。Avalonia 画下划线时会在笔画穿过的地方断开（skip-ink），
+    /// 中文笔画多、位置低，下划线就成了一段一段的；删除线不做这种处理。
+    /// 所以这里用“删除线”，再按字体的度量把它下移到下划线的位置、使用下划线的粗细。
+    /// </summary>
+    public static TextDecorationCollection CreateUnderline(FontFamily family)
+    {
+        // 字体读不到度量时的近似值（常见字体的下划线约在删除线下方 0.4em 处，粗约 0.05em）
+        double offsetEm = 0.4, thicknessEm = 0.05;
+        try
+        {
+            if (FontManager.Current.TryGetGlyphTypeface(new Typeface(family), out var glyphTypeface))
+            {
+                var m = glyphTypeface.Metrics;
+                if (m.DesignEmHeight > 0)
+                {
+                    // 度量值以基线为 0、向下为正
+                    if (m.UnderlinePosition > m.StrikethroughPosition)
+                        offsetEm = (m.UnderlinePosition - m.StrikethroughPosition) / (double)m.DesignEmHeight;
+                    if (m.UnderlineThickness > 0)
+                        thicknessEm = m.UnderlineThickness / (double)m.DesignEmHeight;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 用近似值
+        }
+
+        return
+        [
+            new TextDecoration
+            {
+                Location = TextDecorationLocation.Strikethrough,
+                StrokeOffset = offsetEm,
+                StrokeOffsetUnit = TextDecorationUnit.FontRenderingEmSize,
+                StrokeThickness = thicknessEm,
+                StrokeThicknessUnit = TextDecorationUnit.FontRenderingEmSize,
+            },
+        ];
+    }
 }

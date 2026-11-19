@@ -40,6 +40,8 @@ internal static partial class MarkdownHtmlInlines
         MarkdownNode.Edit(nodes => nodes
             .Unregister<AlertBlockNode>()
             .Register<LightTextEditor.App.Views.StyledAlertBlockNode>()
+            .Unregister<TaskListNode>()
+            .Register<LightTextEditor.App.Views.TaskListCheckBoxNode>()
             .Register<MathInlineNode>()
             .Register<MathBlockNode>()
             .Register<MermaidBlockNode>());

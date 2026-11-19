@@ -113,12 +113,13 @@ public partial class MainWindow : Window
 
         var files = args.Where(a => !a.StartsWith('-')).ToArray();
 
-        // 第一次启动：在笔记库里放一份 Markdown 示例并打开
+        // 第一次启动：在笔记库里放一份 Markdown 示例和 HTML 示例，并打开 Markdown 示例
         if (!Settings.SampleNoteCreated)
         {
             try
             {
                 var sample = SampleNote.Ensure(LibraryPath, Settings);
+                SampleNote.EnsureHtml(LibraryPath, Settings);
                 Settings.SampleNoteCreated = true;
                 App.SaveSettings();
                 if (files.Length == 0) files = [sample];
@@ -233,7 +234,7 @@ public partial class MainWindow : Window
         if (AllTabs().Count == 0) NewDocument();
     }
 
-    private void Select(DocumentTab tab)
+    internal void Select(DocumentTab tab)
     {
         if (!ReferenceEquals(Tabs.SelectedItem, tab))
             Tabs.SelectedItem = tab;
@@ -256,6 +257,7 @@ public partial class MainWindow : Window
         ApplyViewOptions(tab.Editor); // 后台标签页在切到前台时才同步行号、换行、缩放
         if (tab.IsPreviewing && tab.Preview is not null)
         {
+            tab.Preview.Zoom = _vm.Zoom;
             tab.Preview.SetMarkdown(tab.Doc.Document.Text, DocumentDirectory(tab.Doc));
             tab.Preview.IsVisible = true;
         }
@@ -543,7 +545,9 @@ public partial class MainWindow : Window
     private void SetZoom(double zoom)
     {
         _vm.Zoom = Math.Round(Math.Clamp(zoom, 0.5, 4.0), 1);
-        if (_active is not null) ApplyViewOptions(_active.Editor);
+        if (_active is null) return;
+        ApplyViewOptions(_active.Editor);
+        if (_active.Preview is not null) _active.Preview.Zoom = _vm.Zoom;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

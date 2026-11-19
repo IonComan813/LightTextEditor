@@ -39,6 +39,7 @@ public partial class MainWindow
         {
             double ratio = EditorScrollRatio(tab.Editor);
             tab.Preview ??= CreatePreview(tab);
+            tab.Preview.Zoom = _vm.Zoom;
             tab.Preview.SetMarkdown(tab.Doc.Document.Text, DocumentDirectory(tab.Doc));
             tab.IsPreviewing = true;
             if (tab == _active)
@@ -66,12 +67,41 @@ public partial class MainWindow
 
     private MarkdownPreview CreatePreview(DocumentTab tab)
     {
-        var preview = new MarkdownPreview { IsVisible = false };
+        var preview = new MarkdownPreview { IsVisible = false, Zoom = _vm.Zoom };
         preview.LinkClicked += uri => _ = OpenLinkAsync(tab, uri);
-        // 预览中双击回到编辑
-        preview.DoubleTapped += (_, _) => SetPreview(tab, false);
+        preview.TaskToggled += (offset, isChecked) => ToggleTask(tab, offset, isChecked);
+        // 预览中双击回到编辑（双击的是按钮、选框等控件时除外，例如快速连点代码块的“换行”按钮）
+        preview.DoubleTapped += (_, e) =>
+        {
+            if (!preview.IsFromInteractiveElement(e.Source)) SetPreview(tab, false);
+        };
+        // Ctrl + 滚轮缩放（与编辑器相同）；不加 Ctrl 时照常滚动
+        preview.AddHandler(PointerWheelChangedEvent, (_, e) =>
+        {
+            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+            SetZoom(_vm.Zoom + (e.Delta.Y > 0 ? 0.1 : -0.1));
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel);
         EditorHost.Children.Add(preview);
         return preview;
+    }
+
+    /// <summary>
+    /// 预览中勾选 / 取消勾选任务：改写源码里的“[ ]” / “[x]”（可以撤销，按 Ctrl+S 保存）。
+    /// <paramref name="offset"/> 是“[”在源码中的位置；源码对不上时返回 false。
+    /// </summary>
+    internal bool ToggleTask(DocumentTab tab, int offset, bool isChecked)
+    {
+        var document = tab.Doc.Document;
+        if (offset < 0 || offset + 2 >= document.TextLength ||
+            document.GetCharAt(offset) != '[' || document.GetCharAt(offset + 2) != ']' ||
+            document.GetCharAt(offset + 1) is not (' ' or 'x' or 'X'))
+            return false;
+        bool wasChecked = document.GetCharAt(offset + 1) != ' ';
+        if (wasChecked != isChecked)
+            document.Replace(offset + 1, 1, isChecked ? "x" : " ");
+        tab.Preview?.AcceptSourceText(document.Text);
+        return true;
     }
 
     private static double EditorScrollRatio(TextEditor editor)

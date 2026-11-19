@@ -132,11 +132,8 @@ public partial class MainWindow
                 $"此文件混用了多种换行符，主要为 {loaded.LineEnding.DisplayName()}。可在状态栏统一。",
                 NoticeSeverity.Informational, []);
 
-        // 当前标签页是空白的未命名文档时，直接替换掉它
-        var pristine = _active is { Doc.IsPristine: true } ? _active : null;
-        var tab = AddTab(doc, select);
-        if (pristine is not null && select) RemoveTab(pristine);
-        return tab;
+        // 总是在新标签页中打开（当前的空白标签页保留）
+        return AddTab(doc, select);
     }
 
     private DocumentNotice UncertainEncodingNotice(DocumentViewModel doc) => new(

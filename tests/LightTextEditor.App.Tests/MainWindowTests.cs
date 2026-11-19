@@ -182,21 +182,26 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
-    public async Task OpeningFile_ReplacesPristineUntitledTab()
+    public async Task OpeningFile_FromBlankTab_OpensInNewTab()
     {
         var (window, library) = CreateWindow();
         Directory.CreateDirectory(library);
         var path = Path.Combine(library, "a.txt");
         File.WriteAllText(path, "hello");
+        var blank = Assert.Single(window.AllTabs());
 
         await window.OpenFilesAsync([path]);
-        var tab = Assert.Single(window.AllTabs());
+        Assert.Equal(2, window.AllTabs().Count);
+        Assert.Same(blank, window.AllTabs()[0]); // 空白标签页保留
+        var tab = window.ActiveTab!;
         Assert.Equal(path, tab.Doc.FilePath);
         Assert.Equal("hello", tab.Doc.Document.Text);
 
         // 再打开同一个文件只会切换过去，不会重复打开
+        window.Select(blank);
         await window.OpenFilesAsync([path]);
-        Assert.Single(window.AllTabs());
+        Assert.Equal(2, window.AllTabs().Count);
+        Assert.Same(tab, window.ActiveTab);
     }
 
     [AvaloniaFact]
@@ -368,7 +373,7 @@ public class MainWindowTests
         File.WriteAllText(b, "bbbbbbbb");
         await window.OpenFilesAsync([a, b]);
         window.NewDocument(); // 未保存的空白标签页不进入会话
-        window.KeyPress(Key.D1, RawInputModifiers.Control, PhysicalKey.Digit1, "1"); // 选中 s1
+        window.KeyPress(Key.D2, RawInputModifiers.Control, PhysicalKey.Digit2, "2"); // 选中 s1（第 1 个是启动时的空白标签页）
         Dispatcher.UIThread.RunJobs();
         window.ActiveTab!.Editor.CaretOffset = 3;
         window.Close();

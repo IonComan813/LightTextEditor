@@ -1,23 +1,35 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LiveMarkdown.Avalonia;
 
 namespace LightTextEditor.App.Views;
 
-/// <summary>Markdown 渲染预览（只读）。</summary>
+/// <summary>Markdown 渲染预览（只读；任务列表的选框可以点击）。</summary>
 internal sealed class MarkdownPreview : ScrollViewer
 {
     // 子类默认拿不到 ScrollViewer 的控件模板（没有模板就不能滚动），沿用 ScrollViewer 的样式
     protected override Type StyleKeyOverride => typeof(ScrollViewer);
 
     private readonly MarkdownRenderer _renderer;
+    private readonly LayoutTransformControl _zoomHost;
     private readonly ObservableStringBuilder _markdown = new();
+    private string? _text;
+    private double _zoom = 1;
 
     /// <summary>点击了链接（参数：链接地址）。</summary>
     public event Action<Uri>? LinkClicked;
+
+    /// <summary>
+    /// 点击了任务列表的选框（参数：“[ ]”在源码中的位置、新的勾选状态）。
+    /// 处理程序返回 false 时（源码已对不上）选框恢复原状。
+    /// </summary>
+    public event Func<int, bool, bool>? TaskToggled;
 
     public MarkdownPreview()
     {
@@ -33,20 +45,69 @@ internal sealed class MarkdownPreview : ScrollViewer
             e.Handled = true;
             if (e.HRef is { } uri) LinkClicked?.Invoke(uri);
         };
+        _renderer.AddHandler(Button.ClickEvent, OnButtonClick);
 
-        HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
-        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
+        // 缩放：整体按比例放大（文字、图片、代码块一起），相当于浏览器的缩放
+        _zoomHost = new LayoutTransformControl { Child = _renderer };
+
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         Background = Brushes.Transparent;
         Focusable = true;
-        Content = _renderer;
+        Content = _zoomHost;
     }
 
     /// <summary>显示 Markdown 文本。<paramref name="baseDirectory"/> 用于解析相对路径的图片。</summary>
     public void SetMarkdown(string text, string baseDirectory)
     {
+        bool sameBase = _renderer.ImageBasePath == baseDirectory;
         _renderer.ImageBasePath = baseDirectory;
+        if (sameBase && text == _text) return; // 内容没变就不重新渲染（切换标签时保持原样）
+        _text = text;
         _markdown.Clear();
         _markdown.Append(text);
+    }
+
+    /// <summary>源码被预览自身改动（勾选任务）后调用：显示的内容已经一致，下次不用重新渲染。</summary>
+    public void AcceptSourceText(string text) => _text = text;
+
+    /// <summary>缩放比例（1 = 100%）。保持当前阅读位置的比例不变。</summary>
+    public double Zoom
+    {
+        get => _zoom;
+        set
+        {
+            if (Math.Abs(value - _zoom) < 0.001) return;
+            double ratio = ScrollRatio;
+            _zoom = value;
+            _zoomHost.LayoutTransform = Math.Abs(value - 1) < 0.001 ? null : new ScaleTransform(value, value);
+            _zoomHost.UpdateLayout();
+            ScrollToRatio(ratio, once: true);
+        }
+    }
+
+    /// <summary>
+    /// 双击事件是否来自预览里的按钮、选框、滚动条等控件（如代码块的“换行”“复制”按钮）。
+    /// 快速连点这些按钮时也会产生双击，不能当作“回到编辑”。
+    /// </summary>
+    public bool IsFromInteractiveElement(object? source)
+    {
+        for (var v = source as Visual; v is not null && v != this; v = v.GetVisualParent())
+        {
+            if (v is Button or ScrollBar or TextBox or Thumb) return true; // Button 包括 ToggleButton、CheckBox
+            if (v.GetType().Name is "MermaidPresenter" or "PanAndZoom") return true; // Mermaid 图表可以拖动、缩放
+        }
+        return false;
+    }
+
+    private void OnButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source is not CheckBox { Tag: int offset } box || !box.Classes.Contains(TaskListCheckBoxNode.CheckBoxClass))
+            return;
+        e.Handled = true;
+        bool isChecked = box.IsChecked == true;
+        if (TaskToggled?.Invoke(offset, isChecked) != true)
+            box.IsChecked = !isChecked;
     }
 
     /// <summary>当前滚动位置占可滚动范围的比例（0~1）。</summary>
@@ -60,7 +121,7 @@ internal sealed class MarkdownPreview : ScrollViewer
     }
 
     /// <summary>按比例滚动。内容渲染是异步的，渲染完成后再定位一次。</summary>
-    public void ScrollToRatio(double ratio)
+    public void ScrollToRatio(double ratio, bool once = false)
     {
         void Apply()
         {
@@ -68,6 +129,6 @@ internal sealed class MarkdownPreview : ScrollViewer
             Offset = new Vector(0, range <= 0 ? 0 : Math.Clamp(ratio, 0, 1) * range);
         }
         Dispatcher.UIThread.Post(Apply, DispatcherPriority.Background);
-        DispatcherTimer.RunOnce(Apply, TimeSpan.FromMilliseconds(150));
+        if (!once) DispatcherTimer.RunOnce(Apply, TimeSpan.FromMilliseconds(150));
     }
 }

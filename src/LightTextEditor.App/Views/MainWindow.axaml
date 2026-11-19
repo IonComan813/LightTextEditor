@@ -83,6 +83,8 @@
         <MenuItem Header="查看(_V)">
           <MenuItem Header="Markdown 预览(_P)" InputGesture="Ctrl+E" IsEnabled="{Binding IsMarkdown}"
                     ToggleType="CheckBox" IsChecked="{Binding IsPreviewing, Mode=OneWay}" Click="OnTogglePreviewClick" />
+          <MenuItem Header="在浏览器中打开(_B)" IsEnabled="{Binding IsHtml}" Click="OnOpenInBrowserClick"
+                    ToolTip.Tip="用默认浏览器查看网页效果（有未保存的更改时先保存）" />
           <Separator />
           <MenuItem Header="缩放">
             <MenuItem Header="放大" InputGesture="Ctrl+OemPlus" Click="OnZoomInClick" />
@@ -104,7 +106,10 @@
           </MenuItem>
         </MenuItem>
         <MenuItem Header="帮助(_H)">
-          <MenuItem Header="Markdown 示例(_M)" Click="OnOpenSampleClick" />
+          <MenuItem Header="Markdown 示例(_M)" Click="OnOpenSampleClick"
+                    ToolTip.Tip="打开笔记库里的 Markdown 示例（被删除时重新放一份）" />
+          <MenuItem Header="HTML 示例(_T)" Click="OnOpenHtmlSampleClick"
+                    ToolTip.Tip="打开笔记库里的 HTML 示例（被删除时重新放一份）" />
         </MenuItem>
       </Menu>
     </Border>

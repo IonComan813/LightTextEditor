@@ -7,7 +7,7 @@ namespace LightTextEditor.App.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(EncodingText), nameof(LineEndingText), nameof(FileTypeText), nameof(IsMarkdown))]
+    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(EncodingText), nameof(LineEndingText), nameof(FileTypeText), nameof(IsMarkdown), nameof(IsHtml))]
     private DocumentViewModel? _activeDocument;
 
     [ObservableProperty] private int _caretLine = 1;
@@ -49,6 +49,9 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsMarkdown => ActiveDocument is not null &&
         LightTextEditor.Core.Markdown.MarkdownAssets.IsMarkdownExtension(ActiveDocument.Extension);
 
+    /// <summary>当前文件是网页（可以在浏览器中打开）。</summary>
+    public bool IsHtml => ActiveDocument?.Extension.ToLowerInvariant() is ".html" or ".htm" or ".xhtml" or ".svg";
+
     public string PreviewButtonText => IsPreviewing ? "返回编辑" : "预览";
 
     public string FileTypeText => ActiveDocument is null ? "" : LightTextEditor.Core.Library.FileTypes.DisplayName(ActiveDocument.Extension);
@@ -81,6 +84,7 @@ public sealed partial class MainViewModel : ObservableObject
             case nameof(DocumentViewModel.Extension):
                 OnPropertyChanged(nameof(FileTypeText));
                 OnPropertyChanged(nameof(IsMarkdown));
+                OnPropertyChanged(nameof(IsHtml));
                 break;
         }
     }

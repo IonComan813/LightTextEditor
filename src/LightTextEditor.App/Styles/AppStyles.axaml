@@ -15,8 +15,28 @@
   </Style>
 
   <!-- 库里没有样式的行内格式：下划线 ++…++ / <u>、高亮 ==…== / <mark>、下标、上标 -->
+  <!--
+    下划线用 MarkdownUnderline（见 Services/Fonts.cs）而不是内置的 Underline：
+    内置下划线遇到穿过它的笔画会断开（skip-ink），中文笔画多，下划线就成了一段一段的。
+  -->
   <Style Selector="md|MarkdownRenderer Span.Emphasis.Underline">
-    <Setter Property="TextDecorations" Value="Underline" />
+    <Setter Property="TextDecorations" Value="{DynamicResource MarkdownUnderline}" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer md|Link">
+    <Setter Property="TextDecorations" Value="{DynamicResource MarkdownUnderline}" />
+  </Style>
+
+  <!-- 任务列表的选框可以点击（库默认不响应鼠标），见 Views/TaskListCheckBoxNode.cs -->
+  <Style Selector="md|MarkdownRenderer CheckBox.TaskList.Interactive">
+    <Setter Property="IsHitTestVisible" Value="True" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <!-- 未勾选时框里是空的（没有背景就点不中），补一个透明背景 -->
+  <Style Selector="md|MarkdownRenderer CheckBox.TaskList.Interactive:not(:checked) /template/ Border#Border">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="md|MarkdownRenderer CheckBox.TaskList.Interactive:pointerover /template/ Border#Border">
+    <Setter Property="BorderBrush" Value="DodgerBlue" />
   </Style>
   <Style Selector="md|MarkdownRenderer Span.Emphasis.Highlight">
     <Setter Property="Background" Value="{DynamicResource MarkdownHighlightBrush}" />

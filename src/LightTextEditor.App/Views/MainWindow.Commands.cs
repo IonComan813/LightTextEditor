@@ -119,17 +119,32 @@ public partial class MainWindow
 
     // ───────────────────────── 帮助菜单 ─────────────────────────
 
-    /// <summary>打开 Markdown 示例（不存在时重新生成一份）。</summary>
-    private async void OnOpenSampleClick(object? sender, RoutedEventArgs e)
+    /// <summary>打开笔记库里的 Markdown 示例（不存在时重新生成一份）。</summary>
+    private async void OnOpenSampleClick(object? sender, RoutedEventArgs e) =>
+        await OpenSampleAsync(() => SampleNote.Ensure(LibraryPath, Settings));
+
+    /// <summary>打开笔记库里的 HTML 示例（不存在时重新生成一份）。</summary>
+    private async void OnOpenHtmlSampleClick(object? sender, RoutedEventArgs e) =>
+        await OpenSampleAsync(() => SampleNote.EnsureHtml(LibraryPath, Settings));
+
+    private async Task OpenSampleAsync(Func<string> ensure)
     {
         try
         {
-            await OpenFilesAsync([SampleNote.Ensure(LibraryPath, Settings)]);
+            await OpenFilesAsync([ensure()]);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             await Dialogs.ShowErrorAsync(this, "无法打开示例", ex.Message);
         }
+    }
+
+    /// <summary>用默认浏览器打开当前网页文件（有未保存的更改时先保存）。</summary>
+    private async void OnOpenInBrowserClick(object? sender, RoutedEventArgs e)
+    {
+        if (_active is not { } tab) return;
+        if ((tab.Doc.IsDirty || tab.Doc.FilePath is null) && !await SaveAsync(tab)) return;
+        if (tab.Doc.FilePath is { } path) Shell.Open(path);
     }
 
     // ───────────────────────── 编辑菜单 ─────────────────────────

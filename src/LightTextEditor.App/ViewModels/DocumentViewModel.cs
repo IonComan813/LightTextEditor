@@ -50,8 +50,6 @@ public sealed partial class DocumentViewModel : ObservableObject
 
     public string ToolTip => FilePath ?? "尚未保存 — 按 Ctrl+S 直接保存到笔记库";
 
-    /// <summary>未命名、未修改、空白的文档。打开文件时可直接替换掉它。</summary>
-    public bool IsPristine => IsUntitled && !IsDirty && Document.TextLength == 0;
 
     /// <summary>关闭时恢复光标位置用。</summary>
     public int CaretOffset { get; set; }

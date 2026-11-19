@@ -86,7 +86,7 @@ public class MarkdownTests
         // 切到别的标签再切回来，仍然是预览
         Key(window, Avalonia.Input.Key.D1);
         Assert.False(md.Preview.IsVisible);
-        Key(window, Avalonia.Input.Key.D2);
+        Key(window, Avalonia.Input.Key.D3); // 第 1 个是启动时的空白标签页
         Assert.True(md.Preview.IsVisible);
 
         // Esc 回到编辑
