@@ -112,7 +112,11 @@ public sealed partial class DocumentViewModel : ObservableObject
         _newFileExtension = newFileExtension;
 
         Document.UndoStack.PropertyChanged += OnUndoStackPropertyChanged;
-        Document.TextChanged += (_, _) => { if (IsUntitled) UpdateTitle(); };
+        Document.Changed += (_, e) =>
+        {
+            // 未命名文档的标题取第一行有内容的文字：改动在那一行之后时标题不会变，不用重新计算
+            if (IsUntitled && e.Offset <= _titleLineEnd) UpdateTitle();
+        };
         UpdateTitle();
     }
 
@@ -138,12 +142,37 @@ public sealed partial class DocumentViewModel : ObservableObject
 
     private void RefreshDirty() => IsDirty = _hasNonUndoableChanges || !Document.UndoStack.IsOriginalFile;
 
+    /// <summary>未命名文档标题所在行的结束位置（没有标题时为整篇末尾），这之后的改动不影响标题。</summary>
+    private int _titleLineEnd = int.MaxValue;
+
     private void UpdateTitle()
     {
-        Title = FilePath is not null
-            ? Path.GetFileName(FilePath)
-            // 只看开头部分：未命名文档每次按键都会刷新标题，不能每次复制整篇文本
-            : FileNaming.FirstLineTitle(Document.GetText(0, Math.Min(Document.TextLength, 4096))) ?? UntitledTitle;
+        if (FilePath is not null)
+        {
+            Title = Path.GetFileName(FilePath);
+            return;
+        }
+        Title = UntitledFirstLineTitle() ?? UntitledTitle;
+    }
+
+    /// <summary>
+    /// 第一行有内容的文字（去掉 Markdown 标题符号）。未命名文档每次按键都可能调用：
+    /// 只读取那一行（最多 256 个字符），不复制整篇文本。
+    /// </summary>
+    private string? UntitledFirstLineTitle()
+    {
+        foreach (var line in Document.Lines)
+        {
+            if (line.Length == 0) continue;
+            if (FileNaming.FirstLineTitle(Document.GetText(line.Offset, Math.Min(line.Length, 256))) is { } title)
+            {
+                _titleLineEnd = line.EndOffset;
+                return title;
+            }
+            if (line.Offset > 4096) break; // 开头都是空白：当作没有标题
+        }
+        _titleLineEnd = int.MaxValue;
+        return null;
     }
 
     /// <summary>更改保存时使用的编码（不改变文本内容）。</summary>

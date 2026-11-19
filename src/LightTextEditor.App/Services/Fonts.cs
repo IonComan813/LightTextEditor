@@ -18,18 +18,45 @@ internal static class Fonts
         "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei", // Linux
     ];
 
-    public static FontFamily PickCjkFontFamily()
+    /// <summary>
+    /// 字体是否已安装：按名字直接查找（DirectWrite 会匹配各种语言的字体名，如“微软雅黑 UI”与 Microsoft YaHei UI），
+    /// 不枚举全部系统字体。找不到时返回 false，不会回退到其他字体。
+    /// </summary>
+    private static bool IsInstalled(string name)
     {
         try
         {
-            var installed = new HashSet<string>(FontManager.Current.SystemFonts.Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
-            foreach (var name in CjkCandidates)
-                if (installed.Contains(name)) return new FontFamily(name);
+            return FontManager.Current.SystemFonts.TryGetGlyphTypeface(name, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out _);
         }
         catch (Exception)
         {
-            // 字体枚举失败时用默认字体
+            return true; // 查不了时保守地保留
         }
+    }
+
+    private static readonly Dictionary<string, FontFamily> ResolvedLists = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 把逗号分隔的字体列表（如编辑器字体 "Cascadia Mono, Consolas, Microsoft YaHei UI, …"）中没有安装的去掉。
+    /// Avalonia 排版每一段文字时都会按列表顺序逐个查找字体，没安装的每次都查找失败
+    /// （例如 Windows 10 没有 Cascadia Mono），去掉它们可以省下这些查找和内存分配。
+    /// 一个都没有安装时用默认字体。结果缓存，各个编辑器共用同一个 FontFamily 对象。
+    /// </summary>
+    public static FontFamily InstalledFamilies(string familyList)
+    {
+        if (ResolvedLists.TryGetValue(familyList, out var cached)) return cached;
+        var names = familyList.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(IsInstalled)
+            .ToList();
+        var family = names.Count == 0 ? FontFamily.Default : new FontFamily(string.Join(", ", names));
+        ResolvedLists[familyList] = family;
+        return family;
+    }
+
+    public static FontFamily PickCjkFontFamily()
+    {
+        foreach (var name in CjkCandidates)
+            if (IsInstalled(name)) return new FontFamily(name);
         return FontFamily.Default;
     }
 
