@@ -1,7 +1,7 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <!--
-    应用图标：写字板 + 笔（32×32 坐标系，矢量）。
+    应用图标：记事板（32×32 坐标系，矢量）。
     Assets/app.ico 由同一图形渲染生成（见 tests/LightTextEditor.App.Tests/IconExport.cs）。
   -->
   <DrawingImage x:Key="AppIcon">
@@ -10,39 +10,22 @@
       <GeometryDrawing Brush="Transparent" Geometry="M0,0 H32 V32 H0 Z" />
 
       <!-- 纸张 -->
-      <GeometryDrawing Brush="#FFFFFF" Geometry="M4,6.5 A2.5,2.5 0 0 1 6.5,4 H21.5 A2.5,2.5 0 0 1 24,6.5 V27.5 A2.5,2.5 0 0 1 21.5,30 H6.5 A2.5,2.5 0 0 1 4,27.5 Z">
+      <GeometryDrawing Brush="#FFFFFF" Geometry="M6,6.5 A2.5,2.5 0 0 1 8.5,4 H23.5 A2.5,2.5 0 0 1 26,6.5 V27.5 A2.5,2.5 0 0 1 23.5,30 H8.5 A2.5,2.5 0 0 1 6,27.5 Z">
         <GeometryDrawing.Pen>
           <Pen Brush="#7C879A" Thickness="1" />
         </GeometryDrawing.Pen>
       </GeometryDrawing>
       <!-- 顶部装订条 -->
-      <GeometryDrawing Brush="#2F6FED" Geometry="M4,6.5 A2.5,2.5 0 0 1 6.5,4 H21.5 A2.5,2.5 0 0 1 24,6.5 V10 H4 Z" />
+      <GeometryDrawing Brush="#2F6FED" Geometry="M6,6.5 A2.5,2.5 0 0 1 8.5,4 H23.5 A2.5,2.5 0 0 1 26,6.5 V10 H6 Z" />
       <!-- 装订孔 -->
-      <GeometryDrawing Brush="#FFFFFF" Geometry="M8,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M14,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M20,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0" />
+      <GeometryDrawing Brush="#FFFFFF" Geometry="M10,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M16,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M22,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0" />
       <!-- 文字行 -->
-      <GeometryDrawing Geometry="M8,15 H20 M8,19.5 H20 M8,24 H13">
+      <GeometryDrawing Geometry="M10,15 H22 M10,19.5 H22 M10,24 H22">
         <GeometryDrawing.Pen>
           <Pen Brush="#A9B3C2" Thickness="1.8" LineCap="Round" />
         </GeometryDrawing.Pen>
       </GeometryDrawing>
 
-      <!-- 笔：在局部坐标里横着画（笔尖在原点，笔身向 +x），再旋转 -45° 移到右下角 -->
-      <DrawingGroup>
-        <DrawingGroup.Transform>
-          <MatrixTransform Matrix="0.7071,-0.7071,0.7071,0.7071,15.5,28" />
-        </DrawingGroup.Transform>
-        <!-- 削好的木头部分 -->
-        <GeometryDrawing Brush="#F3D3A3" Geometry="M0,0 L4.5,-2.3 L4.5,2.3 Z" />
-        <!-- 笔芯 -->
-        <GeometryDrawing Brush="#2B2F36" Geometry="M0,0 L1.6,-0.82 L1.6,0.82 Z" />
-        <!-- 笔杆 -->
-        <GeometryDrawing Brush="#F59E0B" Geometry="M4.5,-2.3 H16 V2.3 H4.5 Z" />
-        <GeometryDrawing Brush="#D97706" Geometry="M4.5,0.6 H16 V2.3 H4.5 Z" />
-        <!-- 金属箍 -->
-        <GeometryDrawing Brush="#A7AFBC" Geometry="M16,-2.3 H17.6 V2.3 H16 Z" />
-        <!-- 橡皮 -->
-        <GeometryDrawing Brush="#F06292" Geometry="M17.6,-2.3 H19.2 A1.2,1.2 0 0 1 20.4,-1.1 V1.1 A1.2,1.2 0 0 1 19.2,2.3 H17.6 Z" />
-      </DrawingGroup>
     </DrawingGroup>
   </DrawingImage>
 </ResourceDictionary>
