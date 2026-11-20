@@ -309,7 +309,7 @@ public partial class MainWindow : Window
             {
                 tab.Highlighting?.SetLanguage(doc.Extension);
                 if (tab.IsPreviewing && !IsMarkdown(doc)) SetPreview(tab, false);
-                if (tab == _active) ApplyPageLayout(tab); // 改成 / 不再是 Markdown：版面宽度跟着变
+                if (tab == _active) ApplyViewOptions(tab.Editor); // 改成 / 不再是 Markdown：换行和版面跟着变
             }
         };
         // Ctrl+V / Shift+Insert：Markdown 文件中可以粘贴图片
@@ -804,7 +804,7 @@ public partial class MainWindow : Window
             FontFamily = Fonts.InstalledFamilies(Settings.EditorFontFamily),
             FontSize = Settings.EditorFontSize * _vm.Zoom,
             ShowLineNumbers = _vm.ShowLineNumbers,
-            WordWrap = _vm.WordWrap,
+            WordWrap = WordWrapFor(doc),
             Background = Brushes.Transparent,
             // 不要设置 HorizontalScrollBarVisibility：AvaloniaEdit 用它实现自动换行（换行 = 禁用横向滚动），
             // 在 WordWrap 之后再设为 Auto 会让新打开的标签不换行（要关掉再打开才生效）
@@ -884,7 +884,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void ApplyViewOptions(TextEditor editor)
     {
-        if (editor.WordWrap != _vm.WordWrap) editor.WordWrap = _vm.WordWrap;
+        var wrap = _tabs.FirstOrDefault(t => t.Editor == editor) is { } owner ? WordWrapFor(owner.Doc) : _vm.WordWrap;
+        if (editor.WordWrap != wrap) editor.WordWrap = wrap;
         var fontSize = Settings.EditorFontSize * _vm.Zoom;
         if (editor.FontSize != fontSize) editor.FontSize = fontSize;
         if (editor.ShowLineNumbers != _vm.ShowLineNumbers)
@@ -897,19 +898,29 @@ public partial class MainWindow : Window
 
     // ───────────────────────── 居中布局 ─────────────────────────
 
+    /// <summary>居中布局的页面宽度：A4 纸宽 210 mm（100% 缩放时，96 DPI 下的逻辑像素）。</summary>
+    internal const double PageWidth = 794;
+
+    /// <summary>Markdown 页面左右的留白：A4 窄页边距 12.7 mm。正文宽 698（约 185 mm），与以后导出、打印时一致。</summary>
+    internal const double PageMargin = 48;
+
+    /// <summary>Markdown 总是自动换行（源码和预览），其他文件按“自动换行”设置。</summary>
+    private bool WordWrapFor(DocumentViewModel doc) => _vm.WordWrap || IsMarkdown(doc);
+
     /// <summary>
-    /// 版面宽度（编辑器和 Markdown 预览）：
+    /// 版面：
     /// <list type="bullet">
-    /// <item>居中布局：窗口中间固定宽度的“页面”（宽度随缩放变化），两侧是颜色稍深的底色，类似 Word。
-    ///   不自动换行时，超出页面的长行在页面内横向滚动（滚动条在页面底部）。</item>
-    /// <item>否则：代码和纯文本铺满窗口；Markdown 靠左、宽度不超过页面宽度（预览中的代码块、提示框不会拉到最右边），
-    ///   滚动条仍在窗口右边。</item>
+    /// <item>居中布局（Markdown 总是居中）：窗口中间 A4 纸宽的“页面”（宽度随缩放变化），两侧是颜色稍深的底色，类似 Word。
+    ///   Markdown 的源码和预览左右留出页边距；代码和纯文本不留。
+    ///   不自动换行时（只有代码和纯文本），超出页面的长行在页面内横向滚动（滚动条在页面底部）。</item>
+    /// <item>否则（代码和纯文本）：铺满窗口。</item>
     /// </list>
     /// </summary>
     private void ApplyPageLayout(DocumentTab tab)
     {
-        bool centered = _vm.CenteredLayout;
-        double pageWidth = Settings.CenteredLayoutWidth * _vm.Zoom;
+        bool markdown = IsMarkdown(tab.Doc);
+        bool centered = _vm.CenteredLayout || markdown;
+        double pageWidth = PageWidth * _vm.Zoom;
         double available = EditorHost.Bounds.Width;
         double width = available > 0 ? Math.Min(pageWidth, available) : pageWidth; // 窗口比页面窄时铺满
 
@@ -931,13 +942,9 @@ public partial class MainWindow : Window
             }
         }
 
-        // Markdown 源码：自动换行时右侧留白，换行宽度 = 页面宽度（编辑器本身仍铺满，滚动条在窗口右边）。
-        // 不自动换行时不留白：留白处不显示文字，长行会被截在页面宽度处、右边一片空白。
-        bool limitMarkdown = !centered && IsMarkdown(tab.Doc);
-        bool limitSource = limitMarkdown && _vm.WordWrap && available > pageWidth;
-        tab.Editor.Padding = limitSource ? new Thickness(0, 0, available - pageWidth, 0) : default;
-        // Markdown 预览：内容最宽为页面宽度（缩放由预览自己按比例放大，这里用 100% 时的宽度）
-        tab.Preview?.SetContentMaxWidth(limitMarkdown ? Settings.CenteredLayoutWidth : double.PositiveInfinity);
+        // Markdown 源码的页边距与预览相同（预览的留白在 MarkdownPreview 里，随缩放一起放大）
+        double margin = markdown ? PageMargin * _vm.Zoom : 0;
+        tab.Editor.Padding = new Thickness(margin, 0, margin, 0);
 
         if (centered) EditorArea[!Border.BackgroundProperty] = this.GetResourceObservable("PageDeskBrush").ToBinding();
         else EditorArea.Background = null;
