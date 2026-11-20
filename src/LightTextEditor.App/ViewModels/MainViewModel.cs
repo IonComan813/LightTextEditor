@@ -36,8 +36,8 @@ public sealed partial class MainViewModel : ObservableObject
     public string PositionText => $"行 {CaretLine}，列 {CaretColumn}";
 
     public string CharacterCountText => SelectionLength > 0
-        ? $"已选 {SelectionLength:N0}, 共 {CharacterCount:N0} 个字符"
-        : $"共 {CharacterCount:N0} 个字符";
+        ? $"已选 {SelectionLength}, 共 {CharacterCount} 个字符"
+        : $"共 {CharacterCount} 个字符";
 
     public string ZoomText => $"{Math.Round(Zoom * 100)}%";
 
