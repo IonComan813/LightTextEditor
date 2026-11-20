@@ -901,7 +901,7 @@ public partial class MainWindow : Window
     /// <summary>居中布局的页面宽度：A4 纸宽 210 mm（100% 缩放时，96 DPI 下的逻辑像素）。</summary>
     internal const double PageWidth = 794;
 
-    /// <summary>Markdown 页面左右的留白：A4 窄页边距 12.7 mm。正文宽 698（约 185 mm），与以后导出、打印时一致。</summary>
+    /// <summary>Markdown 预览左右的留白：A4 窄页边距 12.7 mm。正文宽 698（约 185 mm），与以后导出、打印时一致。</summary>
     internal const double PageMargin = 48;
 
     /// <summary>Markdown 总是自动换行（源码和预览），其他文件按“自动换行”设置。</summary>
@@ -911,7 +911,7 @@ public partial class MainWindow : Window
     /// 版面：
     /// <list type="bullet">
     /// <item>居中布局（Markdown 总是居中）：窗口中间 A4 纸宽的“页面”（宽度随缩放变化），两侧是颜色稍深的底色，类似 Word。
-    ///   Markdown 的源码和预览左右留出页边距；代码和纯文本不留。
+    ///   只有 Markdown 预览左右留出页边距（见 MarkdownPreview）；源码、代码和纯文本不留。
     ///   不自动换行时（只有代码和纯文本），超出页面的长行在页面内横向滚动（滚动条在页面底部）。</item>
     /// <item>否则（代码和纯文本）：铺满窗口。</item>
     /// </list>
@@ -941,10 +941,6 @@ public partial class MainWindow : Window
                 page.BorderThickness = default;
             }
         }
-
-        // Markdown 源码的页边距与预览相同（预览的留白在 MarkdownPreview 里，随缩放一起放大）
-        double margin = markdown ? PageMargin * _vm.Zoom : 0;
-        tab.Editor.Padding = new Thickness(margin, 0, margin, 0);
 
         if (centered) EditorArea[!Border.BackgroundProperty] = this.GetResourceObservable("PageDeskBrush").ToBinding();
         else EditorArea.Background = null;

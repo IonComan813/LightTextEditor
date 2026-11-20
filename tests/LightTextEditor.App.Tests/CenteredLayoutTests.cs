@@ -89,7 +89,7 @@ public class CenteredLayoutTests
     {
         var long1 = new string('字', 500);
         var line = string.Concat(Enumerable.Range(0, 120).Select(i => $"第{i}段"));
-        // 两项设置都关着：代码和纯文本铺满、不换行；Markdown 仍然居中、换行
+        // 两项设置都关着：代码和纯文本铺满、不换行；Markdown 仍然居中、换行，只有预览留页边距
         var window = await OpenAsync(new AppSettings { CenteredLayout = false, WordWrap = false }, 1600,
             ("a.txt", long1), ("b.md", "# 标题\n\n" + line + "\n\n> [!NOTE]\n> 提示\n\n```\ncode\n```\n"));
         var vm = window.ViewModel;
@@ -103,11 +103,11 @@ public class CenteredLayoutTests
         Assert.False(wrapItem.IsEnabled);
         Assert.False(centerItem.IsEnabled);
 
-        // 源码：A4 宽的居中页面，左右留出页边距，长行自动换行
+        // 源码：A4 宽的居中页面，不留页边距，长行自动换行
         Assert.Equal(Page, md.Editor.Bounds.Width, 0);
         double pageLeft = md.Editor.TranslatePoint(default, window)!.Value.X;
         Assert.InRange(pageLeft, (window.Bounds.Width - Page) / 2 - 1, (window.Bounds.Width - Page) / 2 + 1);
-        Assert.Equal(new Thickness(Margin, 0, Margin, 0), md.Editor.Padding);
+        Assert.Equal(default, md.Editor.Padding);
         Assert.True(md.Editor.ExtentWidth <= md.Editor.ViewportWidth + 1);
         Assert.Contains(md.Editor.TextArea.TextView.VisualLines, l => l.TextLines.Count > 1);
 
@@ -175,6 +175,6 @@ public class CenteredLayoutTests
         Assert.True(tab.Editor.WordWrap);
         Assert.Equal(Page, tab.Editor.Bounds.Width, 0);
         Assert.True(window.ViewModel.IsCenteredLayoutOn);
-        Assert.Equal(new Thickness(Margin, 0, Margin, 0), tab.Editor.Padding);
+        Assert.Equal(default, tab.Editor.Padding);
     }
 }
