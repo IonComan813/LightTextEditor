@@ -24,11 +24,9 @@ public sealed class AppSettings
     public bool WordWrap { get; set; } = true;
     public bool ShowLineNumbers { get; set; } = true;
 
-    /// <summary>居中布局：正文显示在居中的“页面”上（类似 Word），页面宽度见 <see cref="CenteredLayoutWidth"/>。</summary>
+    /// <summary>居中布局：正文显示在居中的“页面”上（类似 Word），页面宽度同 A4 纸。Markdown 文件不论这项设置总是居中。</summary>
     public bool CenteredLayout { get; set; }
 
-    /// <summary>居中布局的页面宽度（100% 缩放时，单位为逻辑像素）。</summary>
-    public double CenteredLayoutWidth { get; set; } = 860;
     public bool ShowStatusBar { get; set; } = true;
     public bool HighlightCurrentLine { get; set; } = true;
     public int TabSize { get; set; } = 4;

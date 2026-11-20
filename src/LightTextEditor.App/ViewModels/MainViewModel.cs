@@ -7,7 +7,8 @@ namespace LightTextEditor.App.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(EncodingText), nameof(LineEndingText), nameof(FileTypeText), nameof(IsMarkdown), nameof(IsHtml))]
+    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(EncodingText), nameof(LineEndingText), nameof(FileTypeText), nameof(IsMarkdown), nameof(IsHtml),
+        nameof(IsWordWrapOn), nameof(IsCenteredLayoutOn), nameof(CenteredLayoutTip))]
     private DocumentViewModel? _activeDocument;
 
     [ObservableProperty] private int _caretLine = 1;
@@ -24,8 +25,15 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(PreviewButtonText))]
     private bool _isPreviewing;
 
-    [ObservableProperty] private bool _wordWrap;
-    [ObservableProperty] private bool _centeredLayout;
+    /// <summary>“自动换行”设置（Markdown 文件不受它影响，见 <see cref="IsWordWrapOn"/>）。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsWordWrapOn))]
+    private bool _wordWrap;
+
+    /// <summary>“居中布局”设置（Markdown 文件不受它影响，见 <see cref="IsCenteredLayoutOn"/>）。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCenteredLayoutOn))]
+    private bool _centeredLayout;
     [ObservableProperty] private bool _showLineNumbers;
     [ObservableProperty] private bool _showStatusBar;
 
@@ -33,11 +41,11 @@ public sealed partial class MainViewModel : ObservableObject
         ? "LightTextEditor"
         : $"{(ActiveDocument.IsDirty ? "● " : "")}{ActiveDocument.Title} - LightTextEditor";
 
-    public string PositionText => SelectionLength > 0
-        ? $"行 {CaretLine}，列 {CaretColumn}（已选 {SelectionLength} 个字符）"
-        : $"行 {CaretLine}，列 {CaretColumn}";
+    public string PositionText => $"行 {CaretLine}，列 {CaretColumn}";
 
-    public string CharacterCountText => $"{CharacterCount:N0} 个字符";
+    public string CharacterCountText => SelectionLength > 0
+        ? $"已选 {SelectionLength}，共 {CharacterCount} 个字符"
+        : $"共 {CharacterCount} 个字符";
 
     public string ZoomText => $"{Math.Round(Zoom * 100)}%";
 
@@ -53,13 +61,34 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>当前文件是网页（可以在浏览器中打开）。</summary>
     public bool IsHtml => ActiveDocument?.Extension.ToLowerInvariant() is ".html" or ".htm" or ".xhtml" or ".svg";
 
+    /// <summary>
+    /// 当前文件是否自动换行：Markdown 总是自动换行（源码和预览），版面与以后的导出、打印一致；
+    /// 其他文件按“自动换行”设置。绑定到菜单项：Markdown 时打勾、菜单项不可用，改不了设置。
+    /// </summary>
+    public bool IsWordWrapOn
+    {
+        get => WordWrap || IsMarkdown;
+        set { if (!IsMarkdown) WordWrap = value; }
+    }
+
+    /// <summary>当前文件是否显示在居中的页面上：Markdown 总是居中（页面宽度同 A4 纸），其他文件按“居中布局”设置。</summary>
+    public bool IsCenteredLayoutOn
+    {
+        get => CenteredLayout || IsMarkdown;
+        set { if (!IsMarkdown) CenteredLayout = value; }
+    }
+
+    public string CenteredLayoutTip => IsMarkdown
+        ? "Markdown 文件总是显示在居中的页面上（宽度同 A4 纸）并自动换行，与导出、打印的版面一致"
+        : "正文显示在窗口中间固定宽度的页面上（类似 Word）";
+
     public string PreviewButtonText => IsPreviewing ? "返回编辑" : "预览";
 
     public string FileTypeText => ActiveDocument is null ? "" : LightTextEditor.Core.Library.FileTypes.DisplayName(ActiveDocument.Extension);
 
     partial void OnCaretLineChanged(int value) => OnPropertyChanged(nameof(PositionText));
     partial void OnCaretColumnChanged(int value) => OnPropertyChanged(nameof(PositionText));
-    partial void OnSelectionLengthChanged(int value) => OnPropertyChanged(nameof(PositionText));
+    partial void OnSelectionLengthChanged(int value) => OnPropertyChanged(nameof(CharacterCountText));
     partial void OnCharacterCountChanged(int value) => OnPropertyChanged(nameof(CharacterCountText));
 
     partial void OnActiveDocumentChanged(DocumentViewModel? oldValue, DocumentViewModel? newValue)
@@ -86,6 +115,9 @@ public sealed partial class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(FileTypeText));
                 OnPropertyChanged(nameof(IsMarkdown));
                 OnPropertyChanged(nameof(IsHtml));
+                OnPropertyChanged(nameof(IsWordWrapOn));
+                OnPropertyChanged(nameof(IsCenteredLayoutOn));
+                OnPropertyChanged(nameof(CenteredLayoutTip));
                 break;
         }
     }

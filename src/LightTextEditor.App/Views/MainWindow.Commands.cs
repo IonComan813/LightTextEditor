@@ -44,7 +44,7 @@ public partial class MainWindow
             (true, false, false, Key.OemPlus or Key.Add) => Sync(() => SetZoom(_vm.Zoom + 0.1)),
             (true, false, false, Key.OemMinus or Key.Subtract) => Sync(() => SetZoom(_vm.Zoom - 0.1)),
             (true, false, false, Key.D0 or Key.NumPad0) => Sync(() => SetZoom(1.0)),
-            (false, false, true, Key.Z) => Sync(() => _vm.WordWrap = !_vm.WordWrap),
+            (false, false, true, Key.Z) => Sync(() => _vm.IsWordWrapOn = !_vm.IsWordWrapOn), // Markdown 总是换行，不改设置
             (true, false, false, >= Key.D1 and <= Key.D9) => Sync(() => SelectByNumber(e.Key - Key.D0)),
             _ => null,
         };
