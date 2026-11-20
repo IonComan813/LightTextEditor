@@ -33,11 +33,11 @@ public sealed partial class MainViewModel : ObservableObject
         ? "LightTextEditor"
         : $"{(ActiveDocument.IsDirty ? "● " : "")}{ActiveDocument.Title} - LightTextEditor";
 
-    public string PositionText => SelectionLength > 0
-        ? $"行 {CaretLine}，列 {CaretColumn}（已选 {SelectionLength} 个字符）"
-        : $"行 {CaretLine}，列 {CaretColumn}";
+    public string PositionText => $"行 {CaretLine}，列 {CaretColumn}";
 
-    public string CharacterCountText => $"{CharacterCount:N0} 个字符";
+    public string CharacterCountText => SelectionLength > 0
+        ? $"已选 {SelectionLength:N0}, 共 {CharacterCount:N0} 个字符"
+        : $"共 {CharacterCount:N0} 个字符";
 
     public string ZoomText => $"{Math.Round(Zoom * 100)}%";
 
@@ -59,7 +59,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnCaretLineChanged(int value) => OnPropertyChanged(nameof(PositionText));
     partial void OnCaretColumnChanged(int value) => OnPropertyChanged(nameof(PositionText));
-    partial void OnSelectionLengthChanged(int value) => OnPropertyChanged(nameof(PositionText));
+    partial void OnSelectionLengthChanged(int value) => OnPropertyChanged(nameof(CharacterCountText));
     partial void OnCharacterCountChanged(int value) => OnPropertyChanged(nameof(CharacterCountText));
 
     partial void OnActiveDocumentChanged(DocumentViewModel? oldValue, DocumentViewModel? newValue)
