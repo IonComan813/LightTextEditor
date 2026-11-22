@@ -67,7 +67,7 @@ public class ImePreeditTests
     }
 
     [AvaloniaFact]
-    public async Task PreeditCursor_FollowsTyping_WhenImeRepeatsTheOldPosition()
+    public async Task PreeditCursor_FollowsTyping_EvenWhenImeReportsTheWrongPosition()
     {
         var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
@@ -81,33 +81,66 @@ public class ImePreeditTests
         Dispatcher.UIThread.RunJobs();
         var client = EditorPreedit.ClientOf(window.ActiveTab!.Editor.TextArea)!;
 
-        // 微软拼音：第一个字母报告光标位置 1，之后只报告文字，Avalonia 沿用旧的位置 1
-        client.SetPreeditText("g", 1);
+        // Windows 上的微软拼音：每次按键都报告光标位置 1，而且同一次按键会报告两次（第二次文字不变）
+        void Key(string text)
+        {
+            client.SetPreeditText(text, 1);
+            client.SetPreeditText(text, 1);
+        }
+        Key("g");
         Assert.Equal(1, client.PreeditCursor);
-        client.SetPreeditText("gu", 1);
-        client.SetPreeditText("gua", 1);
-        client.SetPreeditText("guang", 1);
-        client.SetPreeditText("guang'b", 1); // 输入法自动加上分隔符
+        Key("gu");
+        Key("gua");
+        Key("guang");
+        Key("guang'b"); // 输入法自动加上分隔符
         Assert.Equal(7, client.PreeditCursor);
+        Key("guang'biao");
+        Assert.Equal(10, client.PreeditCursor);
+        Key("guang'bia"); // 退格
+        Assert.Equal(9, client.PreeditCursor);
 
+        // 报告的位置是 0 或不报告：一样跟着文字走
+        client.SetPreeditText("guang'biao", 0);
+        Assert.Equal(10, client.PreeditCursor);
+        client.SetPreeditText("guang'biaox", null);
+        Assert.Equal(11, client.PreeditCursor);
+
+        // 下一次组字重新开始
+        client.SetPreeditText(null);
+        Key("h");
+        Key("ha");
+        Assert.Equal(2, client.PreeditCursor);
+    }
+
+    [AvaloniaFact]
+    public async Task PreeditCursor_MovesWithArrowKeys_WhenImeReportsIt()
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(library);
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        var window = new MainWindow { Width = 1000, Height = 600 };
+        window.Initialize([]);
+        window.Show();
+        var path = Path.Combine(library, "a.txt");
+        File.WriteAllText(path, "");
+        await window.OpenFilesAsync([path]);
+        Dispatcher.UIThread.RunJobs();
+        var client = EditorPreedit.ClientOf(window.ActiveTab!.Editor.TextArea)!;
+
+        client.SetPreeditText("g", 1);
+        client.SetPreeditText("guang'b", 7);
+        Assert.Equal(7, client.PreeditCursor);
         // 用方向键在拼音里移动：文字不变，报告新的位置
         client.SetPreeditText("guang'b", 5);
         Assert.Equal(5, client.PreeditCursor);
         // 在中间打字：光标跟着往后走；退格：往前走
-        client.SetPreeditText("guangx'b", 5);
+        client.SetPreeditText("guangx'b", 6);
         Assert.Equal(6, client.PreeditCursor);
         client.SetPreeditText("guang'b", 5);
         Assert.Equal(5, client.PreeditCursor);
-
-        // 没有报告位置：光标在末尾
-        client.SetPreeditText("guang'bi", null);
+        // 移回末尾后再打字：保持在末尾
+        client.SetPreeditText("guang'b", 7);
+        client.SetPreeditText("guang'bi", 8);
         Assert.Equal(8, client.PreeditCursor);
-
-        // 下一次组字重新开始
-        client.SetPreeditText(null);
-        client.SetPreeditText("h", 1);
-        Assert.Equal(1, client.PreeditCursor);
-        client.SetPreeditText("ha", 1);
-        Assert.Equal(2, client.PreeditCursor);
     }
 }

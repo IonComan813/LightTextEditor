@@ -128,12 +128,21 @@ internal static class EditorPreedit
                 return;
             }
 
-            // Avalonia（Windows）在输入法这次没有报告光标位置时沿用上一次的值：微软拼音继续打字时只报告文字，
-            // 光标位置会一直停在第一个字母后面。文字变了而报告的位置没变，就当它是旧值，让光标随文字长度移动
-            // （在末尾打字时光标保持在末尾；用方向键移到中间后再打字，光标跟着往后走）。
-            int cursor = cursorPos ?? preeditText.Length;
-            if (cursorPos is not null && oldText is not null && preeditText != oldText && cursorPos == oldReported)
-                cursor = _generator.Cursor + (preeditText.Length - oldText.Length);
+            // 输入法报告的光标位置靠不住：Windows 上微软拼音打字时一直报告 1（同一次按键还可能报告多次），
+            // 光标会停在第一个字母后面。所以文字变了（打字、退格）时不用报告的位置，而是让光标跟着文字走：
+            // 原来在末尾就保持在末尾，在中间（用方向键移过去的）就按长度的变化前后移动。
+            // 只有文字没变、报告的位置变了（用方向键在拼音里移动），才采用报告的位置。
+            int cursor;
+            if (oldText is null)
+                cursor = preeditText.Length;
+            else if (preeditText != oldText)
+                cursor = _generator.Cursor >= oldText.Length
+                    ? preeditText.Length
+                    : _generator.Cursor + (preeditText.Length - oldText.Length);
+            else if (cursorPos is not null && cursorPos != oldReported)
+                cursor = cursorPos.Value;
+            else
+                cursor = _generator.Cursor;
 
             _generator.Text = preeditText;
             _generator.Offset = _textArea.Caret.Offset;
