@@ -614,13 +614,13 @@ public partial class MainWindow
     // ───────────────────────── 外部修改 ─────────────────────────
 
     /// <summary>
-    /// 切回本程序时，检查当前显示的标签页对应的文件是否被其他程序修改或删除。
-    /// 只检查这一个标签页；窗口在前台时（包括切换标签页）不检查，保存时会再确认一次（见 SaveAsync）。
+    /// 检查标签页对应的文件是否被其他程序修改或删除：切回本程序时检查当前显示的标签页，切换标签页时检查切到的标签页。
+    /// 不持续监视文件（看着一个标签页时，它的文件被改了不会立刻提示）；保存时会再确认一次（见 SaveAsync）。
     /// 修改时间变了但内容（XxHash3）没变的，不算修改。
     /// </summary>
-    internal void CheckExternalChanges()
+    internal void CheckExternalChanges(DocumentTab tab)
     {
-        if (Dialogs.IsOpenFor(this) || _active is not { } tab) return;
+        if (Dialogs.IsOpenFor(this)) return;
         var doc = tab.Doc;
         if (doc.FilePath is not { } path) return;
         var check = doc.CheckDisk();
