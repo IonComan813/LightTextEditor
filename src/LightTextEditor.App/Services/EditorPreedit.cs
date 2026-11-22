@@ -32,8 +32,17 @@ internal static class EditorPreedit
         // AvaloniaEdit 用类处理程序提供自己的客户端；实例处理程序在它之后执行，把它换掉
         textArea.AddHandler(InputElement.TextInputMethodClientRequestedEvent, (_, e) =>
         {
+            if (ImeDebugLog.IsEnabled)
+                ImeDebugLog.Write("client", $"输入法请求客户端：原来是 {e.Client?.GetType().FullName ?? "null"}，" +
+                                            (textArea.IsReadOnly ? "只读，不替换" : "替换为组字客户端"));
             if (!textArea.IsReadOnly) e.Client = client;
         }, RoutingStrategies.Bubble);
+        if (ImeDebugLog.IsEnabled)
+        {
+            textArea.AddHandler(InputElement.TextInputEvent, (_, e) =>
+                ImeDebugLog.Write("input", $"TextInput {ImeDebugLog.Quote(e.Text)} 光标={textArea.Caret.Offset} handled={e.Handled}"),
+                RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
     }
 
     /// <summary>编辑器的输入法客户端（测试用）。</summary>
@@ -121,6 +130,8 @@ internal static class EditorPreedit
             _reportedCursor = cursorPos;
             if (string.IsNullOrEmpty(preeditText))
             {
+                if (ImeDebugLog.IsEnabled)
+                    ImeDebugLog.Write("client", $"SetPreeditText({ImeDebugLog.Quote(preeditText)}, {cursorPos?.ToString() ?? "null"}) → 清除组字");
                 if (oldOffset is null) return;
                 _generator.Text = null;
                 Redraw(oldOffset.Value);
@@ -147,6 +158,9 @@ internal static class EditorPreedit
             _generator.Text = preeditText;
             _generator.Offset = _textArea.Caret.Offset;
             _generator.Cursor = Math.Clamp(cursor, 0, preeditText.Length);
+            if (ImeDebugLog.IsEnabled)
+                ImeDebugLog.Write("client", $"SetPreeditText({ImeDebugLog.Quote(preeditText)}, {cursorPos?.ToString() ?? "null"}) " +
+                                            $"上次={ImeDebugLog.Quote(oldText)}/报告{oldReported?.ToString() ?? "null"} → 光标 {_generator.Cursor}，文档位置 {_generator.Offset}");
             // 组字期间不显示编辑器的光标（它停在组字文字前面），改为在组字文字里画（见 PreeditCaretRenderer）
             _textArea.Caret.Hide();
             if (oldOffset is { } old && old != _generator.Offset) Redraw(old);
@@ -190,6 +204,8 @@ internal static class EditorPreedit
     /// <summary>组字期间的光标：画在组字文字里输入法指定的位置（通常在末尾）。</summary>
     private sealed class PreeditCaretRenderer(PreeditGenerator generator, TextArea textArea) : IBackgroundRenderer
     {
+        private string? _lastLogged;
+
         public KnownLayer Layer => KnownLayer.Caret;
 
         public void Draw(TextView textView, DrawingContext drawingContext)
@@ -203,6 +219,12 @@ internal static class EditorPreedit
                 var bottom = line.GetVisualPosition(column, VisualYPosition.TextBottom) - textView.ScrollOffset;
                 var brush = textArea.CaretBrush ?? textArea.Foreground ?? Brushes.Black;
                 var x = Math.Round(top.X) + 0.5;
+                if (ImeDebugLog.IsEnabled)
+                {
+                    var start = line.GetVisualPosition(element.VisualColumn, VisualYPosition.TextTop) - textView.ScrollOffset;
+                    var entry = $"组字 {ImeDebugLog.Quote(generator.Text)} 光标 {generator.Cursor}：画在第 {column} 列 x={x:F1}（组字文字从 x={start.X:F1} 开始）";
+                    if (entry != _lastLogged) ImeDebugLog.Write("draw", _lastLogged = entry);
+                }
                 drawingContext.DrawLine(new Pen(brush, 1), new Point(x, top.Y), new Point(x, bottom.Y));
                 return;
             }

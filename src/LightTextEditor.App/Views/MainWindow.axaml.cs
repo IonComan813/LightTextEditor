@@ -64,6 +64,7 @@ public partial class MainWindow : Window
 
         // Windows：标签所在的标题栏区域按客户区处理，右键不弹系统窗口菜单（见 Services/TitleBarTabsHook.cs）
         TitleBarTabsHook.Install(this, p => TabFromSource(this.InputHitTest(p)) is not null);
+        if (Settings.ImeDebugLog) ImeDebugLog.Start(this); // 输入法调试日志（设置文件里的 imeDebugLog）
 
         // 标签栏模板里的部件出现后，只在相关尺寸变化时更新滚动箭头（不在每次布局后遍历可视树）
         Tabs.LayoutUpdated += OnTabsLayoutUpdatedUntilReady;

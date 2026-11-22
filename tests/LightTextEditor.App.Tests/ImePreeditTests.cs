@@ -143,4 +143,42 @@ public class ImePreeditTests
         client.SetPreeditText("guang'bi", 8);
         Assert.Equal(8, client.PreeditCursor);
     }
+
+    [AvaloniaFact]
+    public async Task DebugLog_RecordsPreeditCalls_WhenEnabledInSettings()
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(library);
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false, ImeDebugLog = true };
+        try
+        {
+            var window = new MainWindow { Width = 1000, Height = 600 };
+            window.Initialize([]);
+            window.Show();
+            var path = Path.Combine(library, "a.txt");
+            File.WriteAllText(path, "");
+            await window.OpenFilesAsync([path]);
+            Dispatcher.UIThread.RunJobs();
+            var area = window.ActiveTab!.Editor.TextArea;
+            area.Focus();
+            var client = EditorPreedit.ClientOf(area)!;
+            client.SetPreeditText("g", 1);
+            client.SetPreeditText("gu", 1);
+            Dispatcher.UIThread.RunJobs();
+            window.CaptureRenderedFrame(); // 画一帧：记录光标画在哪里
+            client.SetPreeditText(null);
+            window.KeyTextInput("谷");
+            Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            ImeDebugLog.Stop();
+        }
+
+        var log = File.ReadAllText(ImeDebugLog.FilePath);
+        Assert.Contains("[client] SetPreeditText(\"gu\", 1) 上次=\"g\"/报告1 → 光标 2", log);
+        Assert.Contains("[draw] 组字 \"gu\" 光标 2：画在第 2 列", log);
+        Assert.Contains("→ 清除组字", log);
+        Assert.Contains("[input] TextInput \"谷\"", log);
+    }
 }
