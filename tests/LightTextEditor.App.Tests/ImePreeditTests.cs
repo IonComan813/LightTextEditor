@@ -55,6 +55,7 @@ public class ImePreeditTests
         client.SetPreeditText("kan'bu'daoa", 11);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("kan'bu'daoa", Assert.Single(area.TextView.GetVisualLine(1)!.Elements.OfType<EditorPreedit.PreeditElement>()).Text);
+        Assert.Equal(11, client.PreeditCursor);
 
         // 选词提交：组字文字消失，输入法提交的文字插入文档
         client.SetPreeditText(null);
@@ -63,5 +64,50 @@ public class ImePreeditTests
         Assert.Equal("你好看不到世界", tab.Doc.Document.Text);
         Assert.Empty(area.TextView.GetVisualLine(1)!.Elements.OfType<EditorPreedit.PreeditElement>());
         Assert.Null(client.PreeditText);
+    }
+
+    [AvaloniaFact]
+    public async Task PreeditCursor_FollowsTyping_WhenImeRepeatsTheOldPosition()
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(library);
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        var window = new MainWindow { Width = 1000, Height = 600 };
+        window.Initialize([]);
+        window.Show();
+        var path = Path.Combine(library, "a.txt");
+        File.WriteAllText(path, "");
+        await window.OpenFilesAsync([path]);
+        Dispatcher.UIThread.RunJobs();
+        var client = EditorPreedit.ClientOf(window.ActiveTab!.Editor.TextArea)!;
+
+        // 微软拼音：第一个字母报告光标位置 1，之后只报告文字，Avalonia 沿用旧的位置 1
+        client.SetPreeditText("g", 1);
+        Assert.Equal(1, client.PreeditCursor);
+        client.SetPreeditText("gu", 1);
+        client.SetPreeditText("gua", 1);
+        client.SetPreeditText("guang", 1);
+        client.SetPreeditText("guang'b", 1); // 输入法自动加上分隔符
+        Assert.Equal(7, client.PreeditCursor);
+
+        // 用方向键在拼音里移动：文字不变，报告新的位置
+        client.SetPreeditText("guang'b", 5);
+        Assert.Equal(5, client.PreeditCursor);
+        // 在中间打字：光标跟着往后走；退格：往前走
+        client.SetPreeditText("guangx'b", 5);
+        Assert.Equal(6, client.PreeditCursor);
+        client.SetPreeditText("guang'b", 5);
+        Assert.Equal(5, client.PreeditCursor);
+
+        // 没有报告位置：光标在末尾
+        client.SetPreeditText("guang'bi", null);
+        Assert.Equal(8, client.PreeditCursor);
+
+        // 下一次组字重新开始
+        client.SetPreeditText(null);
+        client.SetPreeditText("h", 1);
+        Assert.Equal(1, client.PreeditCursor);
+        client.SetPreeditText("ha", 1);
+        Assert.Equal(2, client.PreeditCursor);
     }
 }

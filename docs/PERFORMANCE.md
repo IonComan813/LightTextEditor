@@ -12,6 +12,7 @@
 | 纯文本不安装 TextMate | 同上 | `.txt` / `.log` 没有后台着色和对应的内存 |
 | Markdown 预览的样式、配色、字体、扩展在第一次预览时才加载 | `App.EnsureMarkdownResources`、`Styles/MarkdownStyles.axaml` | 启动时不加载 LiveMarkdown、Markdig、RaTeX、Mermaid 等 7 个程序集 |
 | 标签栏滚动箭头只在相关尺寸变化时更新 | `MainWindow.axaml.cs`（`OnTabsLayoutUpdatedUntilReady`） | 原来每次布局（每次按键）都遍历三次标签栏的可视树 |
+| “未保存”标记先比较文本长度，长度和保存时相同才计算哈希 | `DocumentViewModel.IsTextChanged`、`TextFingerprint` | 打字时长度几乎总是不同，不用读文本。哈希用 XxHash3，分块读取文档、不复制整篇文本：1100 万字符（约 22 MB）约 16 ms |
 | 未命名文档的标题只在改动可能影响第一行时重新计算 | `DocumentViewModel.UntitledFirstLineTitle` | 原来每次按键复制开头 4096 个字符 |
 | 编辑器字体列表去掉没安装的字体 | `Fonts.InstalledFamilies` | Avalonia 排版每段文字时都会逐个查找列表里的字体，没安装的每次都查找失败（如 Windows 10 没有 Cascadia Mono） |
 | 后台时回收内存 | `Services/BackgroundMode.cs` | 最小化 2 秒后或在后台 1 分钟后做一次压缩式垃圾回收（`GCCollectionMode.Aggressive`），把空闲内存还给系统 |

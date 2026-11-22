@@ -1,4 +1,5 @@
-using System.ComponentModel;
+using System.IO.Hashing;
+using System.Runtime.InteropServices;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightTextEditor.Core.Library;
@@ -13,6 +14,9 @@ public sealed partial class DocumentViewModel : ObservableObject
 
     /// <summary>撤销栈之外的修改（如更换编码、换行符）也算"未保存"。</summary>
     private bool _hasNonUndoableChanges;
+
+    /// <summary>上次打开 / 保存 / 重新加载时文本内容的指纹，用于判断文本是否真的改过。</summary>
+    private TextFingerprint _savedText;
 
     public TextDocument Document { get; }
 
@@ -105,13 +109,13 @@ public sealed partial class DocumentViewModel : ObservableObject
     {
         Document = new TextDocument(text);
         Document.UndoStack.ClearAll();
-        Document.UndoStack.MarkAsOriginalFile();
+        MarkTextAsSaved();
         _filePath = filePath;
         _encoding = encoding;
         _lineEnding = lineEnding;
         _newFileExtension = newFileExtension;
 
-        Document.UndoStack.PropertyChanged += OnUndoStackPropertyChanged;
+        Document.TextChanged += (_, _) => RefreshDirty(); // 在一组改动（如替换全部）结束后才触发一次
         Document.Changed += (_, e) =>
         {
             // 未命名文档的标题取第一行有内容的文字：改动在那一行之后时标题不会变，不用重新计算
@@ -135,12 +139,21 @@ public sealed partial class DocumentViewModel : ObservableObject
 
     partial void OnFilePathChanged(string? value) => UpdateTitle();
 
-    private void OnUndoStackPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    /// <summary>
+    /// 是否未保存：编码、换行符等文本以外的修改，或文本与上次保存时不同。
+    /// 文本按内容比较，不看撤销记录：打了几个字又删掉，内容和保存时一样，就不算未保存。
+    /// </summary>
+    private void RefreshDirty() => IsDirty = _hasNonUndoableChanges || IsTextChanged();
+
+    private bool IsTextChanged()
     {
-        if (e.PropertyName == nameof(UndoStack.IsOriginalFile)) RefreshDirty();
+        // 不能用撤销栈的 IsOriginalFile 偷懒：TextChanged 触发时撤销栈还没更新
+        if (Document.TextLength != _savedText.Length) return true; // 长度不同：一定改过（打字时通常在这里返回）
+        return TextFingerprint.Of(Document) != _savedText;         // 长度相同才计算哈希
     }
 
-    private void RefreshDirty() => IsDirty = _hasNonUndoableChanges || !Document.UndoStack.IsOriginalFile;
+    /// <summary>当前文本就是保存在磁盘上的内容。</summary>
+    private void MarkTextAsSaved() => _savedText = TextFingerprint.Of(Document);
 
     /// <summary>未命名文档标题所在行的结束位置（没有标题时为整篇末尾），这之后的改动不影响标题。</summary>
     private int _titleLineEnd = int.MaxValue;
@@ -214,7 +227,7 @@ public sealed partial class DocumentViewModel : ObservableObject
         // 写入的字节就是按此编码编码的，不再有无法识别的字节
         Detection = Detection is null ? null : Detection with { IsLossless = true };
         _hasNonUndoableChanges = false;
-        Document.UndoStack.MarkAsOriginalFile();
+        MarkTextAsSaved();
         RefreshDirty();
         Notice = null;
     }
@@ -240,7 +253,7 @@ public sealed partial class DocumentViewModel : ObservableObject
         LineEnding = loaded.LineEnding;
         KnownWriteTimeUtc = TryGetWriteTime(FilePath);
         _hasNonUndoableChanges = false;
-        Document.UndoStack.MarkAsOriginalFile();
+        MarkTextAsSaved();
         RefreshDirty();
     }
 
@@ -263,6 +276,24 @@ public sealed partial class DocumentViewModel : ObservableObject
     {
         try { return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : null; }
         catch (Exception) { return null; }
+    }
+}
+
+/// <summary>
+/// 文本内容的指纹：长度 + XxHash3（64 位，非加密哈希，速度接近内存带宽）。
+/// 分块读取文档，不把整篇文本复制成一个字符串。
+/// </summary>
+internal readonly record struct TextFingerprint(int Length, ulong Hash)
+{
+    public static TextFingerprint Of(TextDocument document)
+    {
+        var hash = new XxHash3();
+        var buffer = new char[16 * 1024];
+        using var reader = document.CreateReader();
+        int read;
+        while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+            hash.Append(MemoryMarshal.AsBytes(buffer.AsSpan(0, read)));
+        return new TextFingerprint(document.TextLength, hash.GetCurrentHashAsUInt64());
     }
 }
 
