@@ -107,6 +107,7 @@ public partial class MainWindow : Window
             ApplyPageLayout(_active);
         };
         AddHandler(PointerMovedEvent, OnMenuPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        MainMenu.AddHandler(PointerPressedEvent, OnMenuBarPointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
         AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
 
@@ -768,6 +769,21 @@ public partial class MainWindow : Window
     /// （不可用的项收不到鼠标事件，Avalonia 不会切换高亮：从“更改后缀”移到灰色的“移动到笔记库”时，
     /// “更改后缀”会一直高亮。）
     /// </summary>
+    /// <summary>
+    /// 菜单打开时，点击菜单栏右边的空白处关闭菜单。
+    /// Avalonia 只在点到菜单控件以外时关闭菜单，而菜单栏横跨整个窗口，空白处也算在菜单控件里。
+    /// </summary>
+    private void OnMenuBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!MainMenu.IsOpen) return;
+        var p = e.GetPosition(MainMenu);
+        if (!new Rect(MainMenu.Bounds.Size).Contains(p)) return; // 弹出的子菜单（在菜单栏下方）
+        if ((e.Source as Visual)?.FindAncestorOfType<MenuItem>(includeSelf: true) is not null) return;
+        if (MainMenu.Items.OfType<MenuItem>().Any(item => new Rect(item.Bounds.Size).Contains(e.GetPosition(item)))) return;
+        MainMenu.Close();
+        e.Handled = true;
+    }
+
     private void OnMenuPointerMoved(object? sender, PointerEventArgs e)
     {
         if (!MainMenu.IsOpen) return;
@@ -828,6 +844,7 @@ public partial class MainWindow : Window
         textView.CurrentLineBorder = new Pen(new SolidColorBrush(Color.FromArgb(0x22, 0x80, 0x80, 0x80)), 1);
 
         SearchPanel.Install(editor);
+        EditorPreedit.Install(editor.TextArea); // 输入法组字的文字（拼音）显示在光标处
 
         // 正文左侧留白（行号关闭时也保留）
         editor.TextArea.LeftMargins.Add(new Border { Width = 10, Background = Brushes.Transparent });

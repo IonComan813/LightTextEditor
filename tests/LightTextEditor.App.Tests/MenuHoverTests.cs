@@ -46,4 +46,42 @@ public class MenuHoverTests
         Assert.False(change.IsSelected);
         Assert.False(change.IsSubMenuOpen);
     }
+
+    [AvaloniaFact]
+    public void ClickingEmptyMenuBar_ClosesOpenMenu()
+    {
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "menu-" + Guid.NewGuid().ToString("N")), RestoreSession = false };
+        var window = new MainWindow { Width = 1000, Height = 700 };
+        window.Initialize([]);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var menu = window.FindControl<Menu>("MainMenu")!;
+        var fileMenu = window.FindControl<MenuItem>("FileMenu")!;
+        var editMenu = menu.Items.OfType<MenuItem>().ElementAt(1);
+        void Click(Point p)
+        {
+            window.MouseDown(p, MouseButton.Left);
+            window.MouseUp(p, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        Click(CenterOf(fileMenu, window));
+        Assert.True(fileMenu.IsSubMenuOpen);
+        // 菜单打开时移到另一个菜单：照常切换过去
+        window.MouseMove(CenterOf(editMenu, window));
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(editMenu.IsSubMenuOpen);
+        Assert.False(fileMenu.IsSubMenuOpen);
+
+        // 点菜单栏右边的空白处：菜单关闭
+        var blank = new Point(window.Bounds.Width - 100, CenterOf(fileMenu, window).Y);
+        Click(blank);
+        Assert.False(editMenu.IsSubMenuOpen);
+        Assert.False(menu.IsOpen);
+
+        // 菜单没打开时点空白处：什么也不发生
+        Click(blank);
+        Assert.False(menu.IsOpen);
+    }
 }
