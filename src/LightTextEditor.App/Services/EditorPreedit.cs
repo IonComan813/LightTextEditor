@@ -52,12 +52,16 @@ internal static class EditorPreedit
     {
         private readonly TextArea _textArea;
         private readonly PreeditGenerator _generator = new();
+        private readonly PreeditCaretRenderer _caretRenderer;
+
+        /// <summary>组字光标最近一次画在第几列（没有组字时画的是 null；测试用）。</summary>
+        internal int? LastDrawnCaretColumn => _caretRenderer.LastDrawnColumn;
 
         public PreeditClient(TextArea textArea)
         {
             _textArea = textArea;
             textArea.TextView.ElementGenerators.Add(_generator);
-            textArea.TextView.BackgroundRenderers.Add(new PreeditCaretRenderer(_generator, textArea));
+            textArea.TextView.BackgroundRenderers.Add(_caretRenderer = new PreeditCaretRenderer(_generator, textArea));
             textArea.Caret.PositionChanged += (_, _) =>
             {
                 RaiseCursorRectangleChanged();
@@ -65,9 +69,6 @@ internal static class EditorPreedit
                 RaiseSelectionChanged();
             };
         }
-
-        /// <summary>输入法上一次报告的光标位置（见 SetPreeditText）。</summary>
-        private int? _reportedCursor;
 
         /// <summary>正在组字的文字；没有时为 null。</summary>
         public string? PreeditText => _generator.Text;
@@ -126,8 +127,6 @@ internal static class EditorPreedit
         {
             int? oldOffset = _generator.Text is null ? null : _generator.Offset;
             string? oldText = _generator.Text;
-            int? oldReported = _reportedCursor;
-            _reportedCursor = cursorPos;
             if (string.IsNullOrEmpty(preeditText))
             {
                 if (ImeDebugLog.IsEnabled)
@@ -139,28 +138,15 @@ internal static class EditorPreedit
                 return;
             }
 
-            // 输入法报告的光标位置靠不住：Windows 上微软拼音打字时一直报告 1（同一次按键还可能报告多次），
-            // 光标会停在第一个字母后面。所以文字变了（打字、退格）时不用报告的位置，而是让光标跟着文字走：
-            // 原来在末尾就保持在末尾，在中间（用方向键移过去的）就按长度的变化前后移动。
-            // 只有文字没变、报告的位置变了（用方向键在拼音里移动），才采用报告的位置。
-            int cursor;
-            if (oldText is null)
-                cursor = preeditText.Length;
-            else if (preeditText != oldText)
-                cursor = _generator.Cursor >= oldText.Length
-                    ? preeditText.Length
-                    : _generator.Cursor + (preeditText.Length - oldText.Length);
-            else if (cursorPos is not null && cursorPos != oldReported)
-                cursor = cursorPos.Value;
-            else
-                cursor = _generator.Cursor;
+            // 光标位置用输入法报告的（与 Avalonia 的 TextBox 相同）；没有报告时在末尾
+            int cursor = cursorPos ?? preeditText.Length;
 
             _generator.Text = preeditText;
             _generator.Offset = _textArea.Caret.Offset;
             _generator.Cursor = Math.Clamp(cursor, 0, preeditText.Length);
             if (ImeDebugLog.IsEnabled)
                 ImeDebugLog.Write("client", $"SetPreeditText({ImeDebugLog.Quote(preeditText)}, {cursorPos?.ToString() ?? "null"}) " +
-                                            $"上次={ImeDebugLog.Quote(oldText)}/报告{oldReported?.ToString() ?? "null"} → 光标 {_generator.Cursor}，文档位置 {_generator.Offset}");
+                                            $"上次={ImeDebugLog.Quote(oldText)} → 光标 {_generator.Cursor}，文档位置 {_generator.Offset}");
             // 组字期间不显示编辑器的光标（它停在组字文字前面），改为在组字文字里画（见 PreeditCaretRenderer）
             _textArea.Caret.Hide();
             if (oldOffset is { } old && old != _generator.Offset) Redraw(old);
@@ -201,15 +187,22 @@ internal static class EditorPreedit
         }
     }
 
-    /// <summary>组字期间的光标：画在组字文字里输入法指定的位置（通常在末尾）。</summary>
+    /// <summary>
+    /// 组字期间的光标：画在组字文字里输入法指定的位置（通常在末尾）。
+    /// 画在背景层：重建显示行（组字文字每次变化都会）之后 TextView 会重画背景层；
+    /// 光标层（KnownLayer.Caret）只在编辑器自己的光标移动、闪烁时才重画，画在那里会一直停在第一次画的位置。
+    /// </summary>
     private sealed class PreeditCaretRenderer(PreeditGenerator generator, TextArea textArea) : IBackgroundRenderer
     {
         private string? _lastLogged;
 
-        public KnownLayer Layer => KnownLayer.Caret;
+        public int? LastDrawnColumn { get; private set; }
+
+        public KnownLayer Layer => KnownLayer.Background;
 
         public void Draw(TextView textView, DrawingContext drawingContext)
         {
+            LastDrawnColumn = null;
             if (generator.Text is null || !textView.VisualLinesValid) return;
             foreach (var line in textView.VisualLines)
             {
@@ -226,6 +219,7 @@ internal static class EditorPreedit
                     if (entry != _lastLogged) ImeDebugLog.Write("draw", _lastLogged = entry);
                 }
                 drawingContext.DrawLine(new Pen(brush, 1), new Point(x, top.Y), new Point(x, bottom.Y));
+                LastDrawnColumn = column;
                 return;
             }
         }
