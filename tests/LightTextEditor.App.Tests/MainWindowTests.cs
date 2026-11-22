@@ -6,6 +6,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using LightTextEditor.App.ViewModels;
 using LightTextEditor.App.Views;
 using LightTextEditor.Core.Settings;
 using LightTextEditor.Core.Text;
@@ -252,38 +253,119 @@ public class MainWindowTests
         Assert.Single(window.AllTabs()); // 关掉最后一个会自动补一个空白标签页
     }
 
-    [AvaloniaFact]
-    public async Task ExternalChange_ReloadsCleanDocument()
+    /// <summary>打开一个文件，然后让“其他程序”改写它（修改时间也变）。</summary>
+    private static async Task<(MainWindow Window, string Path)> OpenAndChangeExternally(string name, Action<MainWindow>? beforeChange = null)
     {
         var (window, library) = CreateWindow();
         Directory.CreateDirectory(library);
-        var path = Path.Combine(library, "ext.txt");
+        var path = Path.Combine(library, name);
         File.WriteAllText(path, "v1");
         await window.OpenFilesAsync([path]);
-
+        beforeChange?.Invoke(window);
         File.WriteAllText(path, "v2");
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(5));
-        window.CheckExternalChanges();
-        Assert.Equal("v2", window.ActiveTab!.Doc.Document.Text);
-        Assert.False(window.ActiveTab.Doc.IsDirty);
+        return (window, path);
+    }
+
+    private static NoticeAction NoticeButton(DocumentViewModel doc, string label) =>
+        doc.Notice!.Actions.Single(a => a.Label == label);
+
+    [AvaloniaFact]
+    public async Task ExternalChange_OnCleanDocument_AsksWhichVersion()
+    {
+        var (window, _) = await OpenAndChangeExternally("ext.txt");
+        window.CheckExternalChanges(window.ActiveTab!);
+        var doc = window.ActiveTab!.Doc;
+        // 不自动重新加载，让用户选
+        Assert.Equal("v1", doc.Document.Text);
+        Assert.Equal("文件已在外部被修改", doc.Notice?.Title);
+        Assert.Equal("磁盘上的文件已被其他程序修改。", doc.Notice!.Message);
+
+        NoticeButton(doc, "载入磁盘上的版本").Execute();
+        Assert.Equal("v2", doc.Document.Text);
+        Assert.False(doc.IsDirty);
+        Assert.NotEqual("文件已在外部被修改", doc.Notice?.Title);
+        // 再切回来：已经是磁盘上的版本，不再提示
+        window.CheckExternalChanges(window.ActiveTab!);
+        Assert.NotEqual("文件已在外部被修改", doc.Notice?.Title);
     }
 
     [AvaloniaFact]
-    public async Task ExternalChange_OnDirtyDocument_AsksInsteadOfReloading()
+    public async Task ExternalChange_OnDirtyDocument_AsksWhichVersion()
     {
-        var (window, library) = CreateWindow();
-        Directory.CreateDirectory(library);
-        var path = Path.Combine(library, "ext2.txt");
-        File.WriteAllText(path, "v1");
-        await window.OpenFilesAsync([path]);
-        Type(window, "mine ");
-
-        File.WriteAllText(path, "v2");
-        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(5));
-        window.CheckExternalChanges();
+        var (window, path) = await OpenAndChangeExternally("ext2.txt", w => Type(w, "mine "));
+        window.CheckExternalChanges(window.ActiveTab!);
         var doc = window.ActiveTab!.Doc;
         Assert.Contains("mine", doc.Document.Text);
         Assert.Equal("文件已在外部被修改", doc.Notice?.Title);
+        Assert.Contains("未保存的更改", doc.Notice!.Message);
+
+        // 保留我的版本：保存时不再询问是否覆盖
+        NoticeButton(doc, "保留我的版本").Execute();
+        Assert.Null(doc.Notice);
+        Assert.True(doc.IsDirty);
+        Assert.True(await window.SaveActiveAsync());
+        Assert.Equal("mine v1", File.ReadAllText(path));
+    }
+
+    [AvaloniaFact]
+    public async Task KeepingEditorVersion_OfCleanDocument_MarksItUnsaved()
+    {
+        var (window, path) = await OpenAndChangeExternally("ext3.txt");
+        window.CheckExternalChanges(window.ActiveTab!);
+        var doc = window.ActiveTab!.Doc;
+        NoticeButton(doc, "保留我的版本").Execute();
+        // 编辑器里的内容和磁盘上的不同了：标记为未保存，关闭时会询问
+        Assert.True(doc.IsDirty);
+        Assert.True(await window.SaveActiveAsync());
+        Assert.Equal("v1", File.ReadAllText(path));
+        Assert.False(doc.IsDirty);
+    }
+
+    [AvaloniaFact]
+    public async Task WriteTimeChanged_ButContentSame_IsNotAnExternalChange()
+    {
+        var (window, library) = CreateWindow();
+        Directory.CreateDirectory(library);
+        var path = Path.Combine(library, "touched.txt");
+        File.WriteAllText(path, "same");
+        await window.OpenFilesAsync([path]);
+
+        // 其他程序原样重新保存了一遍：只有修改时间变了
+        File.WriteAllText(path, "same");
+        var touched = DateTime.UtcNow.AddSeconds(5);
+        File.SetLastWriteTimeUtc(path, touched);
+        window.CheckExternalChanges(window.ActiveTab!);
+        var doc = window.ActiveTab!.Doc;
+        Assert.Null(doc.Notice);
+        Assert.False(doc.IsDirty);
+        Assert.Equal(touched, doc.KnownWriteTimeUtc);
+    }
+
+    [AvaloniaFact]
+    public async Task OnlyTheVisibleTab_IsChecked_SwitchingToATabChecksIt()
+    {
+        var (window, library) = CreateWindow();
+        Directory.CreateDirectory(library);
+        var a = Path.Combine(library, "a.txt");
+        var b = Path.Combine(library, "b.txt");
+        File.WriteAllText(a, "a1");
+        File.WriteAllText(b, "b1");
+        await window.OpenFilesAsync([a, b]);
+        var tabA = window.AllTabs().Single(t => t.Doc.FilePath == Path.GetFullPath(a));
+        var tabB = window.AllTabs().Single(t => t.Doc.FilePath == Path.GetFullPath(b));
+        Assert.Same(tabB, window.ActiveTab);
+
+        File.WriteAllText(a, "a2");
+        File.SetLastWriteTimeUtc(a, DateTime.UtcNow.AddSeconds(5));
+        // 切回本程序时显示的是 b：只检查 b，不检查 a
+        window.CheckExternalChanges(window.ActiveTab!);
+        Assert.Null(tabA.Doc.Notice);
+        // 切换到 a：检查 a
+        window.Select(tabA);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("文件已在外部被修改", tabA.Doc.Notice?.Title);
+        Assert.Equal("a1", tabA.Doc.Document.Text);
     }
 
     [AvaloniaFact]
@@ -295,7 +377,7 @@ public class MainWindowTests
         File.WriteAllText(path, "x");
         await window.OpenFilesAsync([path]);
         File.Delete(path);
-        window.CheckExternalChanges();
+        window.CheckExternalChanges(window.ActiveTab!);
         Assert.True(window.ActiveTab!.Doc.IsDirty);
         Assert.True(await window.SaveActiveAsync());
         Assert.True(File.Exists(path));

@@ -270,9 +270,8 @@ public partial class MainWindow
             return result.Choice == SaveChoice.Save && await SaveUntitledAsync(doc, result.FileName!);
         }
 
-        // 磁盘上的文件在打开后被别的程序改过：确认是否覆盖
-        var diskTime = DocumentViewModel.TryGetWriteTime(doc.FilePath);
-        if (diskTime is not null && doc.KnownWriteTimeUtc is not null && diskTime != doc.KnownWriteTimeUtc &&
+        // 磁盘上的文件在打开后被别的程序改过（内容确实变了）：确认是否覆盖
+        if (doc.CheckDisk().Change == DiskChange.Modified &&
             !await Dialogs.ConfirmAsync(this, "文件已在外部被修改",
                 $"“{doc.Title}”在打开后被其他程序修改过。保存将覆盖那些修改。", "覆盖保存"))
             return false;
@@ -614,56 +613,45 @@ public partial class MainWindow
 
     // ───────────────────────── 外部修改 ─────────────────────────
 
-    /// <summary>窗口重新激活 / 切换标签时，检查文件是否被其他程序修改或删除。</summary>
-    internal void CheckExternalChanges(DocumentTab? only = null)
+    /// <summary>
+    /// 检查标签页对应的文件是否被其他程序修改或删除：切回本程序时检查当前显示的标签页，切换标签页时检查切到的标签页。
+    /// 不持续监视文件（看着一个标签页时，它的文件被改了不会立刻提示）；保存时会再确认一次（见 SaveAsync）。
+    /// 修改时间变了但内容（XxHash3）没变的，不算修改。
+    /// </summary>
+    internal void CheckExternalChanges(DocumentTab tab)
     {
         if (Dialogs.IsOpenFor(this)) return;
-        foreach (var tab in only is null ? AllTabs() : [only])
+        var doc = tab.Doc;
+        if (doc.FilePath is not { } path) return;
+        var check = doc.CheckDisk();
+        switch (check.Change)
         {
-            var doc = tab.Doc;
-            if (doc.FilePath is not { } path) continue;
-            var diskTime = DocumentViewModel.TryGetWriteTime(path);
-
-            if (diskTime is null)
-            {
-                if (doc.KnownWriteTimeUtc is null) continue; // 已经提示过
+            case DiskChange.Missing:
                 doc.MarkMissingOnDisk();
                 doc.Notice = new DocumentNotice("文件已被删除或移动",
                     "编辑器中的内容仍然保留。按 Ctrl+S 可重新保存到原位置。", NoticeSeverity.Warning, []);
-                continue;
-            }
-
-            if (doc.KnownWriteTimeUtc is null || diskTime == doc.KnownWriteTimeUtc) continue;
-
-            if (!doc.IsDirty)
-            {
-                int caret = tab.Editor.CaretOffset;
-                try { doc.Reload(remembered: App.EncodingMemory.Get(path)); }
-                catch (Exception) { continue; }
-                tab.Editor.CaretOffset = Math.Min(caret, doc.Document.TextLength);
-                ShowTransientNotice(doc, new DocumentNotice("已重新加载", "文件已被其他程序修改，已载入最新内容（可按 Ctrl+Z 撤销）。",
-                    NoticeSeverity.Informational, []));
-            }
-            else
-            {
-                // 只提示一次：记住磁盘上的新时间，之后保存时会再确认一次是否覆盖
-                var seen = diskTime;
+                break;
+            case DiskChange.Modified:
+                // 有没有未保存的更改都一样：让用户选用哪个版本，不自动重新加载
                 doc.Notice = new DocumentNotice("文件已在外部被修改",
-                    "你在编辑器中也有未保存的更改。",
+                    doc.IsDirty ? "磁盘上的文件已被其他程序修改，你在编辑器中也有未保存的更改。" : "磁盘上的文件已被其他程序修改。",
                     NoticeSeverity.Warning,
                     [
                         new NoticeAction("载入磁盘上的版本", () =>
                         {
-                            try { doc.Reload(remembered: App.EncodingMemory.Get(path)); doc.Notice = EncodingNotice(tab); }
-                            catch (Exception e) { _ = Dialogs.ShowErrorAsync(this, "无法重新加载", e.Message); }
+                            int caret = tab.Editor.CaretOffset;
+                            try { doc.Reload(remembered: App.EncodingMemory.Get(path)); }
+                            catch (Exception e) { _ = Dialogs.ShowErrorAsync(this, "无法重新加载", e.Message); return; }
+                            tab.Editor.CaretOffset = Math.Min(caret, doc.Document.TextLength);
+                            doc.Notice = EncodingNotice(tab);
                         }),
                         new NoticeAction("保留我的版本", () =>
                         {
-                            doc.KnownWriteTimeUtc = seen;
+                            doc.KeepEditorVersion(check);
                             doc.Notice = null;
                         }),
                     ]);
-            }
+                break;
         }
     }
 
