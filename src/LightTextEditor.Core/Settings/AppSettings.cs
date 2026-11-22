@@ -28,6 +28,12 @@ public sealed class AppSettings
     public bool CenteredLayout { get; set; }
 
     public bool ShowStatusBar { get; set; } = true;
+
+    /// <summary>
+    /// 输入法调试日志（没有界面开关，在设置文件里改，重启后生效）：
+    /// 把输入法消息写到配置目录下的 ime-debug.log。
+    /// </summary>
+    public bool ImeDebugLog { get; set; }
     public bool HighlightCurrentLine { get; set; } = true;
     public int TabSize { get; set; } = 4;
     public bool ConvertTabsToSpaces { get; set; } = true;

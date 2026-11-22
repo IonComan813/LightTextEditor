@@ -2,7 +2,6 @@ using System.IO.Hashing;
 using System.Runtime.InteropServices;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
-using LightTextEditor.Core.Library;
 using LightTextEditor.Core.Text;
 
 namespace LightTextEditor.App.ViewModels;
@@ -116,11 +115,6 @@ public sealed partial class DocumentViewModel : ObservableObject
         _newFileExtension = newFileExtension;
 
         Document.TextChanged += (_, _) => RefreshDirty(); // 在一组改动（如替换全部）结束后才触发一次
-        Document.Changed += (_, e) =>
-        {
-            // 未命名文档的标题取第一行有内容的文字：改动在那一行之后时标题不会变，不用重新计算
-            if (IsUntitled && e.Offset <= _titleLineEnd) UpdateTitle();
-        };
         UpdateTitle();
     }
 
@@ -155,38 +149,11 @@ public sealed partial class DocumentViewModel : ObservableObject
     /// <summary>当前文本就是保存在磁盘上的内容。</summary>
     private void MarkTextAsSaved() => _savedText = TextFingerprint.Of(Document);
 
-    /// <summary>未命名文档标题所在行的结束位置（没有标题时为整篇末尾），这之后的改动不影响标题。</summary>
-    private int _titleLineEnd = int.MaxValue;
-
-    private void UpdateTitle()
-    {
-        if (FilePath is not null)
-        {
-            Title = Path.GetFileName(FilePath);
-            return;
-        }
-        Title = UntitledFirstLineTitle() ?? UntitledTitle;
-    }
-
     /// <summary>
-    /// 第一行有内容的文字（去掉 Markdown 标题符号）。未命名文档每次按键都可能调用：
-    /// 只读取那一行（最多 256 个字符），不复制整篇文本。
+    /// 标签标题：文件名；未保存过的新文档一直是“无标题”，直到保存。
+    /// （不再跟着第一行文字实时变化：标题变宽变窄时标签栏会跟着滚动。保存时的默认文件名仍取第一行文字，见 FileNaming.SuggestBaseName。）
     /// </summary>
-    private string? UntitledFirstLineTitle()
-    {
-        foreach (var line in Document.Lines)
-        {
-            if (line.Length == 0) continue;
-            if (FileNaming.FirstLineTitle(Document.GetText(line.Offset, Math.Min(line.Length, 256))) is { } title)
-            {
-                _titleLineEnd = line.EndOffset;
-                return title;
-            }
-            if (line.Offset > 4096) break; // 开头都是空白：当作没有标题
-        }
-        _titleLineEnd = int.MaxValue;
-        return null;
-    }
+    private void UpdateTitle() => Title = FilePath is null ? UntitledTitle : Path.GetFileName(FilePath);
 
     /// <summary>更改保存时使用的编码（不改变文本内容）。</summary>
     public void ChangeEncoding(TextEncoding encoding)

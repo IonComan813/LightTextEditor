@@ -100,3 +100,14 @@ GitHub Actions（`.github/workflows/release.yml`）自动构建两种 Windows �
 
 - 笔记库：默认 `文档\LightTextEditor`，可在“文件 → 更改笔记库位置”修改
 - 设置、会话与编码记录（`encodings.json`）：`%AppData%\LightTextEditor`（可用环境变量 `LIGHTTEXTEDITOR_CONFIG_DIR` 覆盖）
+
+## 输入法调试日志
+
+输入法（如微软拼音）显示不对时，可以打开调试日志，记录输入法实际发来的内容。没有界面开关，在设置文件里改：
+
+1. 关闭程序（程序运行时会改写设置文件，可能把改动覆盖掉）
+2. 打开 `%AppData%\LightTextEditor\settings.json`，把 `"imeDebugLog": false` 改成 `true`（没有这一项就加上 `"imeDebugLog": true,`）
+3. 启动程序，用输入法打几个字
+4. 日志在 `%AppData%\LightTextEditor\ime-debug.log`（每次启动清空重写，超过 5 MB 后不再写入）
+
+用完把 `imeDebugLog` 改回 `false`。日志里只有输入法相关的内容：组字的拼音、输入的文字和光标位置，不记录文档的其他内容。

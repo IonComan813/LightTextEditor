@@ -47,15 +47,15 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
-    public void Typing_MarksTabDirty_AndUsesFirstLineAsTitle()
+    public void Typing_MarksTabDirty_TitleStaysUntitled()
     {
         var (window, _) = CreateWindow();
         Type(window, "购物清单");
         var tab = window.ActiveTab!;
         Assert.True(tab.Doc.IsDirty);
-        Assert.Equal("购物清单", tab.Doc.Title);
+        Assert.Equal("无标题", tab.Doc.Title); // 保存前不跟着第一行变化
         Assert.Contains("dirty", tab.CloseButton.Classes);
-        Assert.StartsWith("● 购物清单", window.Title);
+        Assert.StartsWith("● 无标题", window.Title);
     }
 
     [AvaloniaFact]
