@@ -57,8 +57,14 @@ internal static class EditorPreedit
             };
         }
 
+        /// <summary>输入法上一次报告的光标位置（见 SetPreeditText）。</summary>
+        private int? _reportedCursor;
+
         /// <summary>正在组字的文字；没有时为 null。</summary>
         public string? PreeditText => _generator.Text;
+
+        /// <summary>光标在组字文字中的位置。</summary>
+        public int PreeditCursor => _generator.Cursor;
 
         public override Visual TextViewVisual => _textArea;
 
@@ -110,6 +116,9 @@ internal static class EditorPreedit
         public override void SetPreeditText(string? preeditText, int? cursorPos)
         {
             int? oldOffset = _generator.Text is null ? null : _generator.Offset;
+            string? oldText = _generator.Text;
+            int? oldReported = _reportedCursor;
+            _reportedCursor = cursorPos;
             if (string.IsNullOrEmpty(preeditText))
             {
                 if (oldOffset is null) return;
@@ -119,9 +128,16 @@ internal static class EditorPreedit
                 return;
             }
 
+            // Avalonia（Windows）在输入法这次没有报告光标位置时沿用上一次的值：微软拼音继续打字时只报告文字，
+            // 光标位置会一直停在第一个字母后面。文字变了而报告的位置没变，就当它是旧值，让光标随文字长度移动
+            // （在末尾打字时光标保持在末尾；用方向键移到中间后再打字，光标跟着往后走）。
+            int cursor = cursorPos ?? preeditText.Length;
+            if (cursorPos is not null && oldText is not null && preeditText != oldText && cursorPos == oldReported)
+                cursor = _generator.Cursor + (preeditText.Length - oldText.Length);
+
             _generator.Text = preeditText;
             _generator.Offset = _textArea.Caret.Offset;
-            _generator.Cursor = Math.Clamp(cursorPos ?? preeditText.Length, 0, preeditText.Length);
+            _generator.Cursor = Math.Clamp(cursor, 0, preeditText.Length);
             // 组字期间不显示编辑器的光标（它停在组字文字前面），改为在组字文字里画（见 PreeditCaretRenderer）
             _textArea.Caret.Hide();
             if (oldOffset is { } old && old != _generator.Offset) Redraw(old);
