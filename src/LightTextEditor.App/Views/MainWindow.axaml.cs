@@ -112,6 +112,7 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
         AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
 
+        // 切回本程序时检查当前显示的标签页对应的文件是否被其他程序改过（窗口在前台时不检查）
         Activated += (_, _) => CheckExternalChanges();
         ActualThemeVariantChanged += (_, _) =>
         {
@@ -387,7 +388,6 @@ public partial class MainWindow : Window
         UpdateCaretStatus();
         UpdateNoticeBar();
         if (tab.IsPreviewing) tab.Preview?.Focus(); else FocusEditor();
-        CheckExternalChanges(tab);
     }
 
     /// <summary>

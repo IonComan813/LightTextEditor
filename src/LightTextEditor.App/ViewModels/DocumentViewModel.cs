@@ -89,6 +89,9 @@ public sealed partial class DocumentViewModel : ObservableObject
     /// <summary>上次读取/保存时文件的修改时间，用于发现外部修改。</summary>
     public DateTime? KnownWriteTimeUtc { get; set; }
 
+    /// <summary>上次读取/保存时文件内容（字节）的 XxHash3：修改时间变了而内容没变（如只是被重新保存了一遍）时不算外部修改。</summary>
+    public ulong? KnownContentHash { get; set; }
+
     /// <summary>新建文档使用的扩展名（文件保存前有效）。</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Extension))]
@@ -124,7 +127,7 @@ public sealed partial class DocumentViewModel : ObservableObject
     public static DocumentViewModel FromFile(string path, LoadedText loaded)
     {
         var doc = new DocumentViewModel(loaded.Text, Path.GetFullPath(path), loaded.Encoding, loaded.LineEnding, Path.GetExtension(path));
-        doc.KnownWriteTimeUtc = TryGetWriteTime(path);
+        doc.RememberDiskState(path);
         doc.Detection = loaded.Detection;
         doc.MarkTried(loaded.Detection.Candidates);
         doc.MarkTried([loaded.Encoding.CodePage]);
@@ -190,7 +193,7 @@ public sealed partial class DocumentViewModel : ObservableObject
         FilePath = Path.GetFullPath(path);
         // 按原来"待确认"的编码保存时仍是待确认（要用户点 ✓）；保存为用户明确选择的编码时为确定
         Encoding = enc;
-        KnownWriteTimeUtc = TryGetWriteTime(path);
+        RememberDiskState(path);
         // 写入的字节就是按此编码编码的，不再有无法识别的字节
         Detection = Detection is null ? null : Detection with { IsLossless = true };
         _hasNonUndoableChanges = false;
@@ -218,7 +221,7 @@ public sealed partial class DocumentViewModel : ObservableObject
         Detection = loaded.Detection;
         Encoding = loaded.Encoding;
         LineEnding = loaded.LineEnding;
-        KnownWriteTimeUtc = TryGetWriteTime(FilePath);
+        RememberDiskState(FilePath);
         _hasNonUndoableChanges = false;
         MarkTextAsSaved();
         RefreshDirty();
@@ -228,15 +231,70 @@ public sealed partial class DocumentViewModel : ObservableObject
     public void UpdatePath(string newPath)
     {
         FilePath = Path.GetFullPath(newPath);
-        KnownWriteTimeUtc = TryGetWriteTime(newPath);
+        RememberDiskState(newPath);
     }
 
     /// <summary>磁盘上的文件不见了：标记为未保存，按 Ctrl+S 可重新写回。</summary>
     public void MarkMissingOnDisk()
     {
         KnownWriteTimeUtc = null;
+        KnownContentHash = null;
         _hasNonUndoableChanges = true;
         RefreshDirty();
+    }
+
+    /// <summary>记下磁盘上文件现在的修改时间和内容哈希（打开、保存、重新加载后调用）。</summary>
+    private void RememberDiskState(string path)
+    {
+        KnownWriteTimeUtc = TryGetWriteTime(path);
+        KnownContentHash = TryHashFile(path);
+    }
+
+    /// <summary>
+    /// 磁盘上的文件和上次读取 / 保存时相比有没有变化。先比较修改时间（不读文件）；
+    /// 修改时间不同时再比较内容的哈希，内容没变就只更新记下的修改时间，不算修改。
+    /// </summary>
+    public DiskCheck CheckDisk()
+    {
+        if (FilePath is not { } path) return DiskCheck.Unchanged;
+        var time = TryGetWriteTime(path);
+        if (time is null) return KnownWriteTimeUtc is null ? DiskCheck.Unchanged : new DiskCheck(DiskChange.Missing, null, null); // 删除已经提示过
+        if (KnownWriteTimeUtc is null || time == KnownWriteTimeUtc) return DiskCheck.Unchanged;
+        var hash = TryHashFile(path);
+        if (hash is not null && hash == KnownContentHash)
+        {
+            KnownWriteTimeUtc = time;
+            return DiskCheck.Unchanged;
+        }
+        return new DiskCheck(DiskChange.Modified, time, hash);
+    }
+
+    /// <summary>
+    /// 用户选择“保留我的版本”：之后按磁盘上的这个版本判断外部修改（保存时不再询问是否覆盖）。
+    /// 编辑器里的内容和磁盘上的不同了，标记为未保存。
+    /// </summary>
+    public void KeepEditorVersion(DiskCheck seen)
+    {
+        KnownWriteTimeUtc = seen.WriteTimeUtc;
+        KnownContentHash = seen.ContentHash;
+        _hasNonUndoableChanges = true;
+        RefreshDirty();
+    }
+
+    /// <summary>文件内容（字节）的 XxHash3；读不了时为 null。</summary>
+    public static ulong? TryHashFile(string path)
+    {
+        try
+        {
+            var hash = new XxHash3();
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 64 * 1024);
+            hash.Append(stream);
+            return hash.GetCurrentHashAsUInt64();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public static DateTime? TryGetWriteTime(string path)
@@ -262,6 +320,14 @@ internal readonly record struct TextFingerprint(int Length, ulong Hash)
             hash.Append(MemoryMarshal.AsBytes(buffer.AsSpan(0, read)));
         return new TextFingerprint(document.TextLength, hash.GetCurrentHashAsUInt64());
     }
+}
+
+public enum DiskChange { None, Modified, Missing }
+
+/// <summary><see cref="DocumentViewModel.CheckDisk"/> 的结果：变化，以及当时磁盘上文件的修改时间和内容哈希。</summary>
+public readonly record struct DiskCheck(DiskChange Change, DateTime? WriteTimeUtc, ulong? ContentHash)
+{
+    public static DiskCheck Unchanged => default;
 }
 
 public enum NoticeSeverity { Informational, Success, Warning, Error }
