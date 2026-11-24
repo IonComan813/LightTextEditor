@@ -38,7 +38,8 @@ public class PerformanceProbe
     {
         library = Path.Combine(TestAppBuilder.Root, "perf-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false,
+            WordWrap = Environment.GetEnvironmentVariable("PERF_WRAP") != "0" };
         var window = new MainWindow { Width = 1000, Height = 700 };
         window.Initialize([]);
         window.Show();
@@ -162,5 +163,111 @@ public class PerformanceProbe
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         Report("后台回收后", "私有内存", PrivateMb(), "MB");
         Report("后台回收后", "GC 已提交内存", GC.GetGCMemoryInfo().TotalCommittedBytes / 1048576.0, "MB");
+    }
+
+    /// <summary>
+    /// 打开约 3.6 MB 的 JSON（PERF_SHAPE=minified：整个文件只有一行；pretty：格式化成多行），
+    /// 测量打开并显示、输入、翻页的耗时（主线程被占用的时间）。
+    /// </summary>
+    [AvaloniaFact]
+    public async Task LargeFile()
+    {
+        if (!Enabled) return;
+        var shape = Environment.GetEnvironmentVariable("PERF_SHAPE") ?? "minified";
+        var window = CreateWindow(out var library);
+        // 与 Windows 上的默认字体（Consolas + 微软雅黑）相当：中文由字体列表里的中文字体显示，不走系统字体回退
+        App.Settings.EditorFontFamily = "DejaVu Sans Mono, WenQuanYi Zen Hei";
+        var ext = Environment.GetEnvironmentVariable("PERF_EXT") ?? ".json";
+        var path = Path.Combine(library, "big" + ext);
+        File.WriteAllText(path, LargeJson(shape == "pretty"));
+        var scenario = $"大文件 {shape}{ext} 换行={App.Settings.WordWrap} {new FileInfo(path).Length / 1048576.0:0.00} MB";
+
+        var sw = Stopwatch.StartNew();
+        await window.OpenFilesAsync([path]);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        Report(scenario, "打开并显示", sw.Elapsed.TotalMilliseconds, "ms");
+
+        // PERF_EXPAND=1：打开后立即展开为多行（提示条上的 ✓），再测输入、翻页
+        if (Environment.GetEnvironmentVariable("PERF_EXPAND") == "1")
+        {
+            sw.Restart();
+            Assert.True(window.Reformat(window.ActiveTab!, expand: true));
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+            Report(scenario, "展开为多行并显示", sw.Elapsed.TotalMilliseconds, "ms");
+        }
+
+
+        // PERF_SETTLE_MS：先等这么久（让后台的语法分析做完）再测输入
+        if (int.TryParse(Environment.GetEnvironmentVariable("PERF_SETTLE_MS"), out var settle))
+            for (var until = DateTime.UtcNow.AddMilliseconds(settle); DateTime.UtcNow < until;) { await Task.Delay(50); Dispatcher.UIThread.RunJobs(); }
+
+        var editor = window.ActiveTab!.Editor;
+        editor.TextArea.Focus();
+        editor.CaretOffset = Math.Min(editor.Document.TextLength, int.Parse(Environment.GetEnvironmentVariable("PERF_CARET") ?? "1000"));
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+
+        sw.Restart();
+        const int keys = 10;
+        for (int i = 0; i < keys; i++)
+        {
+            window.KeyTextInput("a");
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
+        Report(scenario, "每次按键", sw.Elapsed.TotalMilliseconds / keys, "ms");
+
+        sw.Restart();
+        const int pages = 10;
+        for (int i = 0; i < pages; i++)
+        {
+            window.KeyPressQwerty(Avalonia.Input.PhysicalKey.PageDown, Avalonia.Input.RawInputModifiers.None);
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
+        Report(scenario, "每次翻页", sw.Elapsed.TotalMilliseconds / pages, "ms");
+
+        sw.Restart();
+        editor.ScrollToHorizontalOffset(20000);
+        editor.ScrollToVerticalOffset(editor.ExtentHeight / 2);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        Report(scenario, "滚动到中间", sw.Elapsed.TotalMilliseconds, "ms");
+
+        await SettleAsync();
+        ReportMemory(scenario);
+    }
+
+    private static bool Ascii => Environment.GetEnvironmentVariable("PERF_ASCII") == "1";
+
+    private static int Records => int.Parse(Environment.GetEnvironmentVariable("PERF_RECORDS") ?? "21000");
+
+    /// <summary>约 3.6 MB 的 JSON（PERF_RECORDS 个对象的数组）。</summary>
+    internal static string LargeJson(bool pretty)
+    {
+        var sb = new System.Text.StringBuilder();
+        string nl = pretty ? "\n" : "", ind = pretty ? "  " : "", sp = pretty ? " " : "";
+        sb.Append('[').Append(nl);
+        for (int i = 0; i < Records; i++)
+        {
+            if (i > 0) sb.Append(',').Append(nl);
+            sb.Append(ind).Append('{').Append(nl)
+              .Append(ind).Append(ind).Append($"\"id\":{sp}{i},").Append(nl)
+              .Append(ind).Append(ind).Append($"\"name\":{sp}\"{(Ascii ? "User" : "用户")}{i} user_{i}\",").Append(nl)
+              .Append(ind).Append(ind).Append($"\"email\":{sp}\"user{i}@example.com\",").Append(nl)
+              .Append(ind).Append(ind).Append($"\"tags\":{sp}[\"alpha\",{sp}\"beta\",{sp}\"gamma\"],").Append(nl)
+              .Append(ind).Append(ind).Append($"\"score\":{sp}{i * 3.14:0.00},").Append(nl)
+              .Append(ind).Append(ind).Append($"\"active\":{sp}{(i % 2 == 0 ? "true" : "false")}").Append(nl)
+              .Append(ind).Append('}');
+        }
+        sb.Append(nl).Append(']');
+        return sb.ToString();
     }
 }

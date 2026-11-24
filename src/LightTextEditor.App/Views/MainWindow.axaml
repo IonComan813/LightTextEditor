@@ -81,6 +81,11 @@
           <MenuItem Header="转到行(_G)…" InputGesture="Ctrl+G" Click="OnGoToLineClick" />
           <Separator />
           <MenuItem Header="插入日期时间(_D)" InputGesture="F5" Click="OnInsertDateTimeClick" />
+          <Separator />
+          <MenuItem Header="展开为多行" Click="OnExpandClick"
+                    ToolTip.Tip="把整个文件格式化为多行、按层级缩进。只支持 JSON、CSS 和 JavaScript 文件；只增删空白，不改变内容的含义" />
+          <MenuItem Header="压缩为单行" Click="OnCompactClick"
+                    ToolTip.Tip="去掉整个文件中多余的空白和换行。只支持 JSON、CSS 和 JavaScript 文件；不改变量名、不删注释，会影响代码含义的换行保留不动" />
         </MenuItem>
         <MenuItem Header="查看(_V)">
           <MenuItem Header="Markdown 预览(_P)" InputGesture="Ctrl+E" IsEnabled="{Binding IsMarkdown}"

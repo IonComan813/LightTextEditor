@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using LightTextEditor.App.Services;
+using LightTextEditor.App.ViewModels;
 using LightTextEditor.Core.Text;
 
 namespace LightTextEditor.App.Views;
@@ -171,6 +172,8 @@ public partial class MainWindow
     private void OnReplaceClick(object? sender, RoutedEventArgs e) => OpenSearch(replace: true);
     private async void OnGoToLineClick(object? sender, RoutedEventArgs e) => await GoToLineAsync();
     private void OnInsertDateTimeClick(object? sender, RoutedEventArgs e) => InsertDateTime();
+    private void OnExpandClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) Reformat(tab, expand: true); }
+    private void OnCompactClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) Reformat(tab, expand: false); }
 
     private void OpenSearch(bool replace)
     {
@@ -200,6 +203,66 @@ public partial class MainWindow
         editor.TextArea.Caret.Column = 1;
         editor.TextArea.Caret.BringCaretToView();
         FocusEditor();
+    }
+
+    /// <summary>
+    /// 把整个文件展开为多行或压缩为单行（JSON、CSS、JavaScript，见 <see cref="CodeLayout"/>）。一次修改，可以撤销；
+    /// 不支持的文件或无法可靠分析的内容提示原因，不改动。保留文件末尾的换行。
+    /// </summary>
+    internal bool Reformat(DocumentTab tab, bool expand)
+    {
+        if (tab.IsPreviewing) SetPreview(tab, false);
+        var editor = tab.Editor;
+        var document = editor.Document;
+        var text = document.Text;
+        var verb = expand ? "展开" : "压缩";
+
+        if (CodeLayout.LanguageFor(tab.Doc.Extension) is not { } language)
+        {
+            ShowTransientNotice(tab.Doc, new DocumentNotice($"无法{verb}：不支持这种文件",
+                "只能展开和压缩 JSON、CSS 和 JavaScript 文件（.json、.css、.js）。",
+                NoticeSeverity.Warning, []), seconds: 8);
+            return false;
+        }
+
+        var newLine = tab.Doc.LineEnding.ToNewLineString();
+        var result = expand
+            ? CodeLayout.Expand(language, text, editor.Options.IndentationString, newLine)
+            : CodeLayout.Compact(language, text, newLine);
+        if (result.Text is not { } formatted)
+        {
+            ShowTransientNotice(tab.Doc, new DocumentNotice($"无法{verb}这个 {CodeLayout.DisplayName(language)} 文件，没有改动",
+                result.Error ?? "", NoticeSeverity.Warning, []), seconds: 8);
+            return false;
+        }
+
+        if (text.EndsWith('\n') || text.EndsWith('\r')) formatted += newLine; // 保留文件末尾的换行
+        if (formatted != text)
+        {
+            document.Replace(0, document.TextLength, formatted); // 一次修改，Ctrl+Z 撤销
+            editor.CaretOffset = 0;
+            editor.TextArea.Caret.BringCaretToView();
+        }
+
+        string title, message;
+        if (formatted == text)
+        {
+            title = expand ? "已经是多行" : "已经是单行";
+            message = "内容没有变化。";
+        }
+        else if (!expand && result.KeptLineBreaks > 0)
+        {
+            title = "已压缩";
+            message = $"有 {result.KeptLineBreaks} 处换行会影响代码的含义（如省略了分号的语句之间、行注释之后），保留未动。按 Ctrl+Z 可以撤销；保存后才会写入文件。";
+        }
+        else
+        {
+            title = expand ? "已展开为多行" : "已压缩为单行";
+            message = "按 Ctrl+Z 可以撤销；保存后才会写入文件。";
+        }
+        ShowTransientNotice(tab.Doc, new DocumentNotice(title, message, NoticeSeverity.Success, []), seconds: 6);
+        FocusEditor();
+        return true;
     }
 
     private void InsertDateTime()

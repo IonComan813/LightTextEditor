@@ -147,7 +147,28 @@ public partial class MainWindow
             doc.Notice = new DocumentNotice("换行符不一致",
                 $"此文件混用了多种换行符，主要为 {loaded.LineEnding.DisplayName()}。可在状态栏统一。",
                 NoticeSeverity.Informational, []);
+        if (doc.Notice is null && IsCompressedToLongLines(doc.Document) &&
+            CodeLayout.LanguageFor(doc.Extension) is { } language && CodeLayout.CanExpand(language, loaded.Text))
+            doc.Notice = CompressedFileNotice(tab);
         return tab;
+    }
+
+    /// <summary>大部分文字都在超长的行里（见 <see cref="LongLineWindow"/>）：多半是压缩过的文件。只看每行的长度。</summary>
+    private static bool IsCompressedToLongLines(AvaloniaEdit.Document.TextDocument document)
+    {
+        long inLongLines = 0;
+        foreach (var line in document.Lines)
+            if (line.Length > LongLineWindow.Threshold) inLongLines += line.Length;
+        return inLongLines > 0 && inLongLines >= document.TextLength * 0.9;
+    }
+
+    /// <summary>打开被压缩为单个超长行的文件（JSON、CSS、JavaScript）时询问是否还原为多行：[✓] 展开，× 关闭。</summary>
+    private DocumentNotice CompressedFileNotice(DocumentTab tab)
+    {
+        bool suspended = tab.Highlighting?.IsSuspendedForLongLines == true;
+        var message = (suspended ? "已暂时关闭语法高亮。" : "") + "是否还原为多行结构？（也可以随时在“编辑”菜单中展开或压缩）";
+        return new DocumentNotice("当前文件被压缩为单个超长行", message, NoticeSeverity.Informational,
+            [new NoticeAction("还原为多行结构", () => Reformat(tab, expand: true)) { Icon = NoticeIcon.Checkmark }]);
     }
 
     /// <summary>
@@ -314,11 +335,15 @@ public partial class MainWindow
         });
     }
 
+    /// <summary>
+    /// 保存 / 移动到笔记库时检查文件名：名称和后缀都相同才算同名（“笔记.txt”和“笔记.md”可以同时存在）。
+    /// </summary>
     private static string? ValidateNewFileName(string directory, string fileName)
     {
         if (FileNaming.ValidateUserFileName(fileName) is { } error) return error;
         var target = Path.Combine(directory, fileName);
-        if (File.Exists(target) || Directory.Exists(target)) return "笔记库中已有同名文件。";
+        if (File.Exists(target) || Directory.Exists(target))
+            return $"笔记库中已有“{fileName}”，请换一个文件名（换个后缀也可以）。";
         return null;
     }
 
@@ -514,7 +539,22 @@ public partial class MainWindow
         Directory.CreateDirectory(LibraryPath);
         var target = Path.Combine(LibraryPath, Path.GetFileName(oldPath));
         if (File.Exists(target) || Directory.Exists(target))
-            target = FileNaming.MakeUniquePath(LibraryPath, Path.GetFileNameWithoutExtension(oldPath), Path.GetExtension(oldPath));
+        {
+            // 笔记库里已有同名（名称和后缀都相同）的文件：提醒，请用户换个名字
+            var library = LibraryPath;
+            var prompt = await Dialogs.PromptFileNameAsync(this, new FileNamePrompt(
+                Title: "移动到笔记库",
+                BaseName: Path.GetFileNameWithoutExtension(oldPath),
+                Extension: Path.GetExtension(oldPath),
+                PrimaryText: confirm ? "下一步" : "移动",
+                Validate: name => ValidateNewFileName(library, name))
+            {
+                Message = $"笔记库中已有“{Path.GetFileName(oldPath)}”。请换一个文件名：",
+                Location = library,
+            });
+            if (prompt.Choice != SaveChoice.Save) return false;
+            target = Path.Combine(LibraryPath, prompt.FileName!);
+        }
 
         var images = IsMarkdown(doc)
             ? MarkdownImageMigration.Plan(doc.Document.Text, oldPath, LibraryPath)
@@ -524,7 +564,7 @@ public partial class MainWindow
         if (confirm && !await Dialogs.ConfirmAsync(this, "移动到笔记库",
                 $"将“{Path.GetFileName(oldPath)}”移动到笔记库？\n\n" +
                 $"从：{Path.GetDirectoryName(oldPath)}\n到：{LibraryPath}" +
-                (Path.GetFileName(target) != Path.GetFileName(oldPath) ? $"\n（笔记库中已有同名文件，将保存为“{Path.GetFileName(target)}”）" : "") +
+                (Path.GetFileName(target) != Path.GetFileName(oldPath) ? $"\n（保存为“{Path.GetFileName(target)}”）" : "") +
                 (images.IsEmpty ? "" : $"\n\n文中引用的 {images.Transfers.Count} 张图片也会一起放进笔记库" +
                     (copied > 0 ? $"（其中 {copied} 张在原位置以外或也被其他笔记使用，复制一份）" : "") + "。") +
                 "\n\n原位置将不再保留这个文件。", "移动"))

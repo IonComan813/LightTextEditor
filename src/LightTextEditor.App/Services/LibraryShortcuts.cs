@@ -25,7 +25,20 @@ internal static class LibraryShortcuts
         return Path.GetFullPath(filePath).StartsWith(root, PathComparison);
     }
 
-    /// <summary>为笔记库外的文件创建快捷方式（已有指向它的快捷方式时不重复创建）。返回快捷方式路径，失败时为 null。</summary>
+    /// <summary>
+    /// 快捷方式名里文件夹与文件名之间的分隔符。文件名里不能用 /，用外观相同的全角斜杠，
+    /// 如“hdrplayer／readme.md”。
+    /// </summary>
+    public const char ParentSeparator = '／';
+
+    /// <summary>
+    /// 为笔记库外的文件创建快捷方式（已有指向它的快捷方式时不重复创建）。返回快捷方式路径，失败时为 null。
+    /// <para>
+    /// 名字取文件名；已有指向其他同名文件的快捷方式时，这一组同名的快捷方式都在文件名前加上父文件夹名
+    /// （如“hdrplayer／readme.md”“docs／readme.md”），父文件夹也同名时再加一层；两层仍同名时加编号
+    /// （“a／hdrplayer／readme (2).md”）。自动进行，不提示。
+    /// </para>
+    /// </summary>
     public static string? Ensure(string libraryPath, string targetPath)
     {
         try
@@ -36,7 +49,22 @@ internal static class LibraryShortcuts
 
             var folder = FolderPath(libraryPath);
             Directory.CreateDirectory(folder);
-            var path = UniqueShortcutPath(folder, Path.GetFileName(targetPath));
+            var fileName = Path.GetFileName(targetPath);
+
+            // 指向其他同名文件的快捷方式：一起改成带父文件夹名的名字
+            var sameName = Shortcuts(folder)
+                .Where(e => string.Equals(Path.GetFileName(e.Target), fileName, PathComparison))
+                .ToList();
+            string name = fileName;
+            if (sameName.Count > 0)
+            {
+                int levels = LevelsToDistinguish(sameName.Select(e => e.Target).Append(targetPath).ToList());
+                foreach (var (entry, target) in sameName)
+                    RenameShortcut(entry, target, NameWithParents(target, levels));
+                name = NameWithParents(targetPath, levels);
+            }
+
+            var path = UniqueShortcutPath(folder, name);
             if (OperatingSystem.IsWindows()) CreateWindowsShortcut(path, targetPath);
             else File.CreateSymbolicLink(path, targetPath);
             return path;
@@ -45,6 +73,69 @@ internal static class LibraryShortcuts
         {
             return null; // 快捷方式只是方便查找，失败不影响编辑
         }
+    }
+
+    private static string ShortcutSuffix => OperatingSystem.IsWindows() ? ".lnk" : "";
+
+    /// <summary>“外部文件”文件夹里的快捷方式和它们指向的文件。</summary>
+    private static IEnumerable<(string Entry, string Target)> Shortcuts(string folder)
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(folder))
+            if (TryResolve(entry, out var target)) yield return (entry, target);
+    }
+
+    /// <summary>文件名前加上 <paramref name="levels"/> 层父文件夹名，如“hdrplayer／readme.md”。</summary>
+    internal static string NameWithParents(string targetPath, int levels)
+    {
+        var name = Path.GetFileName(targetPath);
+        var dir = Path.GetDirectoryName(targetPath);
+        for (int i = 0; i < levels && !string.IsNullOrEmpty(dir); i++)
+        {
+            var parent = Path.GetFileName(Path.TrimEndingDirectorySeparator(dir));
+            if (string.IsNullOrEmpty(parent)) parent = dir.TrimEnd('\\', '/', ':'); // 盘符根目录：C:\ → C
+            if (parent.Length == 0) break;
+            name = parent + ParentSeparator + name;
+            dir = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(dir));
+        }
+        return name;
+    }
+
+    /// <summary>快捷方式名里最多加几层父文件夹名；还区分不开时加编号“(2)”。</summary>
+    internal const int MaxParentLevels = 2;
+
+    /// <summary>加一层父文件夹名能区分这些同名文件时为 1，否则为 2（两层仍同名的由编号区分）。</summary>
+    private static int LevelsToDistinguish(IReadOnlyList<string> targets)
+    {
+        var comparer = PathComparison == StringComparison.Ordinal ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        return targets.Select(t => NameWithParents(t, 1)).Distinct(comparer).Count() == targets.Count ? 1 : MaxParentLevels;
+    }
+
+    /// <summary><paramref name="current"/> 就是 <paramref name="name"/>，或是它加了编号的“名称 (2).md”。</summary>
+    private static bool IsNameOrNumbered(string current, string name)
+    {
+        if (string.Equals(current, name, PathComparison)) return true;
+        var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(Path.GetFileNameWithoutExtension(name)) + @" \(\d+\)" +
+                      System.Text.RegularExpressions.Regex.Escape(Path.GetExtension(name)) + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(current, pattern,
+            PathComparison == StringComparison.Ordinal ? default : System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>
+    /// 把已有的快捷方式改成新名字。只改程序自己起的名字（文件名本身、带父文件夹的名字，及它们加了编号的“(2)”），
+    /// 用户自己改过的名字不动。已经是新名字（或新名字加编号）时不动；新名字被占用时加编号。
+    /// </summary>
+    private static void RenameShortcut(string entry, string target, string newName)
+    {
+        var folder = Path.GetDirectoryName(entry)!;
+        var current = Path.GetFileName(entry);
+        if (ShortcutSuffix.Length > 0 && current.EndsWith(ShortcutSuffix, StringComparison.OrdinalIgnoreCase))
+            current = current[..^ShortcutSuffix.Length];
+        if (IsNameOrNumbered(current, newName)) return;
+
+        bool ours = Enumerable.Range(0, MaxParentLevels + 1).Any(levels => IsNameOrNumbered(current, NameWithParents(target, levels)));
+        if (!ours) return;
+
+        File.Move(entry, UniqueShortcutPath(folder, newName)); // 移动的是快捷方式 / 符号链接本身，不是它指向的文件
     }
 
     /// <summary>删除指向该文件的快捷方式。</summary>
@@ -64,11 +155,8 @@ internal static class LibraryShortcuts
     {
         var folder = FolderPath(libraryPath);
         if (!Directory.Exists(folder)) return null;
-        foreach (var entry in Directory.EnumerateFileSystemEntries(folder))
-        {
-            if (TryResolve(entry, out var target) && string.Equals(target, targetPath, PathComparison))
-                return entry;
-        }
+        foreach (var (entry, target) in Shortcuts(folder))
+            if (string.Equals(target, targetPath, PathComparison)) return entry;
         return null;
     }
 
@@ -106,7 +194,7 @@ internal static class LibraryShortcuts
 
     private static string UniqueShortcutPath(string folder, string fileName)
     {
-        string suffix = OperatingSystem.IsWindows() ? ".lnk" : "";
+        string suffix = ShortcutSuffix;
         var stem = Path.GetFileNameWithoutExtension(fileName);
         var ext = Path.GetExtension(fileName);
         var path = Path.Combine(folder, fileName + suffix);

@@ -126,8 +126,15 @@ public class LibraryTests
         Assert.False(window.IsExternalFile(tab.Doc));
     }
 
+    private static FluentAvalonia.UI.Controls.FAContentDialog FindDialog(MainWindow window)
+    {
+        Dispatcher.UIThread.RunJobs();
+        return Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window)
+            .OfType<FluentAvalonia.UI.Controls.FAContentDialog>().Single();
+    }
+
     [AvaloniaFact]
-    public async Task MoveToLibrary_KeepsBothFiles_WhenNameIsTaken()
+    public async Task MoveToLibrary_AsksForAnotherName_WhenNameAndExtensionAreTaken()
     {
         var (window, library, outside) = CreateWindow();
         Directory.CreateDirectory(library);
@@ -135,9 +142,123 @@ public class LibraryTests
         var external = Path.Combine(outside, "同名.txt");
         File.WriteAllText(external, "外面的");
         await window.OpenFilesAsync([external]);
-        Assert.True(await window.MoveToLibraryAsync(window.ActiveTab!, confirm: false));
-        Assert.Equal(Path.Combine(library, "同名 (2).txt"), window.ActiveTab!.Doc.FilePath);
+
+        var moving = window.MoveToLibraryAsync(window.ActiveTab!, confirm: false);
+        var dialog = FindDialog(window);
+        var panel = (StackPanel)dialog.Content!;
+        Assert.Contains(panel.Children.OfType<TextBlock>(), t => t.Text == "笔记库中已有“同名.txt”。请换一个文件名：");
+        Assert.False(dialog.IsPrimaryButtonEnabled); // 名字没改不能移动
+        Assert.Contains(panel.Children.OfType<TextBlock>(), t => t.IsVisible && t.Text?.StartsWith("笔记库中已有“同名.txt”，请换一个文件名") == true);
+
+        var nameBox = (TextBox)panel.Children.OfType<Grid>().Single().Children[0];
+        nameBox.Text = "外面的同名";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(dialog.IsPrimaryButtonEnabled);
+        dialog.Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.Primary);
+        Assert.True(await moving);
+
+        Assert.Equal(Path.Combine(library, "外面的同名.txt"), window.ActiveTab!.Doc.FilePath);
         Assert.Equal("库里的", File.ReadAllText(Path.Combine(library, "同名.txt")));
+        Assert.Equal("外面的", File.ReadAllText(Path.Combine(library, "外面的同名.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task MoveToLibrary_CanBeCancelled_WhenNameIsTaken()
+    {
+        var (window, library, outside) = CreateWindow();
+        Directory.CreateDirectory(library);
+        File.WriteAllText(Path.Combine(library, "同名.txt"), "库里的");
+        var external = Path.Combine(outside, "同名.txt");
+        File.WriteAllText(external, "外面的");
+        await window.OpenFilesAsync([external]);
+
+        var moving = window.MoveToLibraryAsync(window.ActiveTab!, confirm: false);
+        FindDialog(window).Hide(FluentAvalonia.UI.Controls.FAContentDialogResult.None);
+        Assert.False(await moving);
+        Assert.Equal(external, window.ActiveTab!.Doc.FilePath);
+        Assert.True(File.Exists(external));
+    }
+
+    [AvaloniaFact]
+    public async Task MoveToLibrary_SameNameWithAnotherExtension_IsNotAConflict()
+    {
+        var (window, library, outside) = CreateWindow();
+        Directory.CreateDirectory(library);
+        File.WriteAllText(Path.Combine(library, "笔记.md"), "库里的");
+        var external = Path.Combine(outside, "笔记.txt");
+        File.WriteAllText(external, "外面的");
+        await window.OpenFilesAsync([external]);
+        Assert.True(await window.MoveToLibraryAsync(window.ActiveTab!, confirm: false)); // 不弹对话框
+        Assert.Equal(Path.Combine(library, "笔记.txt"), window.ActiveTab!.Doc.FilePath);
+    }
+
+    [AvaloniaFact]
+    public void Shortcuts_WithTheSameName_GetTheirParentFolderNames()
+    {
+        var (_, library, outside) = CreateWindow();
+        string Make(params string[] parts)
+        {
+            var path = Path.Combine([outside, .. parts]);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, path);
+            return path;
+        }
+        string[] Names() => Directory.GetFileSystemEntries(LibraryShortcuts.FolderPath(library))
+            .Select(e => Path.GetFileName(e).Replace(".lnk", "")).Order(StringComparer.Ordinal).ToArray();
+
+        var first = Make("a", "hdrplayer", "readme.md");
+        LibraryShortcuts.Ensure(library, first);
+        Assert.Equal(["readme.md"], Names()); // 只有一个时就是文件名
+
+        // 第二个同名文件：两个都加上父文件夹名
+        var second = Make("b", "docs", "readme.md");
+        LibraryShortcuts.Ensure(library, second);
+        Assert.Equal(["docs／readme.md", "hdrplayer／readme.md"], Names());
+
+        // 父文件夹也同名：再加一层
+        var third = Make("c", "hdrplayer", "readme.md");
+        LibraryShortcuts.Ensure(library, third);
+        Assert.Equal(["a／hdrplayer／readme.md", "b／docs／readme.md", "c／hdrplayer／readme.md"], Names());
+
+        // 两层父文件夹名也相同：加编号
+        var fourth = Make("x", "c", "hdrplayer", "readme.md");
+        LibraryShortcuts.Ensure(library, fourth);
+        Assert.Equal(["a／hdrplayer／readme.md", "b／docs／readme.md", "c／hdrplayer／readme (2).md", "c／hdrplayer／readme.md"], Names());
+        Assert.Equal(fourth, ResolveShortcut(library, "c／hdrplayer／readme (2).md"));
+        var fifth = Make("y", "c", "hdrplayer", "readme.md");
+        LibraryShortcuts.Ensure(library, fifth); // 已有的不再改名
+        Assert.Equal(["a／hdrplayer／readme.md", "b／docs／readme.md", "c／hdrplayer／readme (2).md", "c／hdrplayer／readme (3).md", "c／hdrplayer／readme.md"], Names());
+        Assert.Equal(fifth, ResolveShortcut(library, "c／hdrplayer／readme (3).md"));
+
+        // 都仍指向原来的文件；别的文件名不受影响
+        Assert.Equal(first, ResolveShortcut(library, "a／hdrplayer／readme.md"));
+        Assert.Equal(third, ResolveShortcut(library, "c／hdrplayer／readme.md"));
+        LibraryShortcuts.Ensure(library, Make("d", "notes.txt"));
+        Assert.Contains("notes.txt", Names());
+        Assert.Equal(first, File.ReadAllText(first));
+    }
+
+    [AvaloniaFact]
+    public void Shortcuts_RenamedByTheUser_AreLeftAlone()
+    {
+        var (_, library, outside) = CreateWindow();
+        var first = Path.Combine(outside, "x", "readme.md");
+        var second = Path.Combine(outside, "y", "readme.md");
+        foreach (var p in new[] { first, second }) { Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, ""); }
+        var shortcut = LibraryShortcuts.Ensure(library, first)!;
+        var renamed = Path.Combine(Path.GetDirectoryName(shortcut)!, "我的说明" + (OperatingSystem.IsWindows() ? ".lnk" : ""));
+        File.Move(shortcut, renamed);
+        LibraryShortcuts.Ensure(library, second);
+        Assert.True(File.Exists(renamed) || new FileInfo(renamed).LinkTarget is not null);
+        Assert.Equal(first, ResolveShortcut(library, "我的说明"));
+        Assert.Equal(second, ResolveShortcut(library, "y／readme.md"));
+    }
+
+    private static string ResolveShortcut(string library, string name)
+    {
+        var path = Path.Combine(LibraryShortcuts.FolderPath(library), name + (OperatingSystem.IsWindows() ? ".lnk" : ""));
+        Assert.True(LibraryShortcuts.TryResolve(path, out var target), name);
+        return target;
     }
 
     [AvaloniaFact]

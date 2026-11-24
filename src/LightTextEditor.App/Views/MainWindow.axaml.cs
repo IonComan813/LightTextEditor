@@ -847,6 +847,7 @@ public partial class MainWindow : Window
 
         SearchPanel.Install(editor);
         EditorPreedit.Install(editor.TextArea); // 输入法组字的文字（拼音）显示在光标处
+        LongLineWindow.Install(editor); // 超长的行只排版光标附近的一段（否则打开、输入都会卡住）
 
         // 正文左侧留白（行号关闭时也保留）
         editor.TextArea.LeftMargins.Add(new Border { Width = 10, Background = Brushes.Transparent });
