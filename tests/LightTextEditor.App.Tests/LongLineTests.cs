@@ -355,6 +355,27 @@ public class LongLineShots
         window.Show();
         var path = Path.Combine(library, "data.json");
         File.WriteAllText(path, LongLineTests.LongJson(2_000_000) + "\n");
+        if (!wordWrap)
+        {
+            // 压缩过的 JavaScript：提示条；“编辑”菜单
+            var js = Path.Combine(library, "bundle.min.js");
+            File.WriteAllText(js, string.Concat(Enumerable.Repeat("!function(e){var t={a:1};function r(){return t}e.r=r}(window);", 300)));
+            await window.OpenFilesAsync([js]);
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            window.CaptureRenderedFrame()!.Save(Path.Combine(dir, "compressed-js-opened.png"));
+            var edit = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(window).OfType<Avalonia.Controls.MenuItem>()
+                .Single(m => m.Header as string == "编辑(_E)");
+            edit.Open();
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            window.CaptureRenderedFrame()!.Save(Path.Combine(dir, "edit-menu.png"));
+            edit.Close();
+            window.ActiveTab!.Doc.Notice!.Actions.Single().Execute();
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            window.CaptureRenderedFrame()!.Save(Path.Combine(dir, "compressed-js-expanded.png"));
+        }
         await window.OpenFilesAsync([path]);
         var editor = window.ActiveTab!.Editor;
         editor.TextArea.Focus();

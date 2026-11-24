@@ -193,7 +193,7 @@ public class PerformanceProbe
         if (Environment.GetEnvironmentVariable("PERF_EXPAND") == "1")
         {
             sw.Restart();
-            Assert.True(window.ReformatJson(window.ActiveTab!, expand: true, wholeDocument: true));
+            Assert.True(window.Reformat(window.ActiveTab!, expand: true));
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             Dispatcher.UIThread.RunJobs();

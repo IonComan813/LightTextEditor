@@ -172,8 +172,8 @@ public partial class MainWindow
     private void OnReplaceClick(object? sender, RoutedEventArgs e) => OpenSearch(replace: true);
     private async void OnGoToLineClick(object? sender, RoutedEventArgs e) => await GoToLineAsync();
     private void OnInsertDateTimeClick(object? sender, RoutedEventArgs e) => InsertDateTime();
-    private void OnExpandJsonClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) ReformatJson(tab, expand: true); }
-    private void OnCompactJsonClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) ReformatJson(tab, expand: false); }
+    private void OnExpandClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) Reformat(tab, expand: true); }
+    private void OnCompactClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) Reformat(tab, expand: false); }
 
     private void OpenSearch(bool replace)
     {
@@ -206,40 +206,61 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 展开（格式化为多行）或压缩（合并为一行）JSON：有选中的文字时只处理选中的部分，否则处理整篇
-    /// （<paramref name="wholeDocument"/> 为 true 时总是整篇）。一次修改，可以撤销；不是有效的 JSON 时提示原因，不改动。
-    /// 只增删字符串以外的空白，字符串和数字原样保留（见 <see cref="JsonText"/>）。
+    /// 把整个文件展开为多行或压缩为单行（JSON、CSS、JavaScript，见 <see cref="CodeLayout"/>）。一次修改，可以撤销；
+    /// 不支持的文件或无法可靠分析的内容提示原因，不改动。保留文件末尾的换行。
     /// </summary>
-    internal bool ReformatJson(DocumentTab tab, bool expand, bool wholeDocument = false)
+    internal bool Reformat(DocumentTab tab, bool expand)
     {
         if (tab.IsPreviewing) SetPreview(tab, false);
         var editor = tab.Editor;
         var document = editor.Document;
-        bool selection = !wholeDocument && editor.SelectionLength > 0;
-        int start = selection ? editor.SelectionStart : 0;
-        int length = selection ? editor.SelectionLength : document.TextLength;
-        var text = document.GetText(start, length);
+        var text = document.Text;
         var verb = expand ? "展开" : "压缩";
 
-        if (!JsonText.Validate(text, out var error))
+        if (CodeLayout.LanguageFor(tab.Doc.Extension, text) is not { } language)
         {
-            ShowTransientNotice(tab.Doc, new DocumentNotice($"无法{verb}：{(selection ? "选中的文字" : "当前内容")}不是有效的 JSON",
-                error ?? "", NoticeSeverity.Warning, []), seconds: 6);
+            ShowTransientNotice(tab.Doc, new DocumentNotice($"无法{verb}：不支持这种文件",
+                "可以展开和压缩 JSON、CSS 和 JavaScript 文件。（HTML、XML 等在标签之间加减空白会改变显示的文字，没有支持。）",
+                NoticeSeverity.Warning, []), seconds: 8);
             return false;
         }
 
         var newLine = tab.Doc.LineEnding.ToNewLineString();
-        var result = expand ? JsonText.Format(text, editor.Options.IndentationString, newLine) : JsonText.Minify(text);
-        if (text.EndsWith('\n') || text.EndsWith('\r')) result += newLine; // 保留末尾的换行
-        if (result != text)
+        var result = expand
+            ? CodeLayout.Expand(language, text, editor.Options.IndentationString, newLine)
+            : CodeLayout.Compact(language, text, newLine);
+        if (result.Text is not { } formatted)
         {
-            document.Replace(start, length, result); // 一次修改，Ctrl+Z 撤销
-            if (selection) editor.Select(start, result.Length);
-            else editor.CaretOffset = 0;
+            ShowTransientNotice(tab.Doc, new DocumentNotice($"无法{verb}这个 {CodeLayout.DisplayName(language)} 文件，没有改动",
+                result.Error ?? "", NoticeSeverity.Warning, []), seconds: 8);
+            return false;
+        }
+
+        if (text.EndsWith('\n') || text.EndsWith('\r')) formatted += newLine; // 保留文件末尾的换行
+        if (formatted != text)
+        {
+            document.Replace(0, document.TextLength, formatted); // 一次修改，Ctrl+Z 撤销
+            editor.CaretOffset = 0;
             editor.TextArea.Caret.BringCaretToView();
         }
-        ShowTransientNotice(tab.Doc, new DocumentNotice(expand ? "已展开为多行" : "已压缩为一行",
-            result == text ? "内容没有变化。" : "按 Ctrl+Z 可以撤销；保存后才会写入文件。", NoticeSeverity.Success, []));
+
+        string title, message;
+        if (formatted == text)
+        {
+            title = expand ? "已经是多行" : "已经是单行";
+            message = "内容没有变化。";
+        }
+        else if (!expand && result.KeptLineBreaks > 0)
+        {
+            title = "已压缩";
+            message = $"有 {result.KeptLineBreaks} 处换行会影响代码的含义（如省略了分号的语句之间、行注释之后），保留未动。按 Ctrl+Z 可以撤销；保存后才会写入文件。";
+        }
+        else
+        {
+            title = expand ? "已展开为多行" : "已压缩为单行";
+            message = "按 Ctrl+Z 可以撤销；保存后才会写入文件。";
+        }
+        ShowTransientNotice(tab.Doc, new DocumentNotice(title, message, NoticeSeverity.Success, []), seconds: 6);
         FocusEditor();
         return true;
     }

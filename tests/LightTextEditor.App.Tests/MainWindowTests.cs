@@ -140,6 +140,14 @@ public class MainWindowTests
         Dispatcher.UIThread.RunJobs();
         Assert.False(dialog.IsPrimaryButtonEnabled);
 
+        // 名称相同、后缀不同不算同名
+        FileNameFields(dialog).Extension.Text = ".md";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(dialog.IsPrimaryButtonEnabled);
+        FileNameFields(dialog).Extension.Text = ".txt";
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(dialog.IsPrimaryButtonEnabled);
+
         FileNameFields(dialog).Name.Text = "不重复";
         Dispatcher.UIThread.RunJobs();
         Assert.True(dialog.IsPrimaryButtonEnabled);
