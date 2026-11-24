@@ -147,7 +147,30 @@ public partial class MainWindow
             doc.Notice = new DocumentNotice("换行符不一致",
                 $"此文件混用了多种换行符，主要为 {loaded.LineEnding.DisplayName()}。可在状态栏统一。",
                 NoticeSeverity.Informational, []);
+        if (doc.Notice is null && IsMinifiedJson(doc.Document, loaded.Text))
+            doc.Notice = MinifiedJsonNotice(tab);
         return tab;
+    }
+
+    /// <summary>
+    /// 是不是压缩成一行（或少数几行）的 JSON：大部分文字在超长的行里（见 <see cref="LongLineWindow"/>），而且是有效的 JSON。
+    /// 没有超长的行时只看每行的长度，不解析。
+    /// </summary>
+    private static bool IsMinifiedJson(AvaloniaEdit.Document.TextDocument document, string text)
+    {
+        long inLongLines = 0;
+        foreach (var line in document.Lines)
+            if (line.Length > LongLineWindow.Threshold) inLongLines += line.Length;
+        return inLongLines > 0 && inLongLines >= document.TextLength * 0.9 && JsonText.IsJson(text);
+    }
+
+    /// <summary>打开压缩成一行的 JSON 时询问是否还原为多行：[✓] 展开整篇，× 关闭（之后可以在“编辑”菜单中展开）。</summary>
+    private DocumentNotice MinifiedJsonNotice(DocumentTab tab)
+    {
+        bool suspended = tab.Highlighting?.IsSuspendedForLongLines == true;
+        var message = (suspended ? "已暂时关闭语法高亮。" : "") + "是否还原为多行结构？（也可以随时在“编辑”菜单中展开或压缩）";
+        return new DocumentNotice("当前文件是单行压缩的 JSON", message, NoticeSeverity.Informational,
+            [new NoticeAction("还原为多行结构", () => ReformatJson(tab, expand: true, wholeDocument: true)) { Icon = NoticeIcon.Checkmark }]);
     }
 
     /// <summary>

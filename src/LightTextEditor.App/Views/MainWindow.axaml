@@ -81,6 +81,11 @@
           <MenuItem Header="转到行(_G)…" InputGesture="Ctrl+G" Click="OnGoToLineClick" />
           <Separator />
           <MenuItem Header="插入日期时间(_D)" InputGesture="F5" Click="OnInsertDateTimeClick" />
+          <Separator />
+          <MenuItem Header="展开 JSON（还原为多行）(_J)" Click="OnExpandJsonClick"
+                    ToolTip.Tip="把 JSON 格式化为每项一行、按层级缩进；有选中的文字时只处理选中的部分" />
+          <MenuItem Header="压缩 JSON（合并为一行）(_K)" Click="OnCompactJsonClick"
+                    ToolTip.Tip="去掉 JSON 中字符串以外的空白和换行；有选中的文字时只处理选中的部分" />
         </MenuItem>
         <MenuItem Header="查看(_V)">
           <MenuItem Header="Markdown 预览(_P)" InputGesture="Ctrl+E" IsEnabled="{Binding IsMarkdown}"

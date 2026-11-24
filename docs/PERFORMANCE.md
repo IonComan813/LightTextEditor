@@ -61,7 +61,8 @@ LTE_PERF=1 LTE_PERF_OUT=perf.tsv dotnet test tests/LightTextEditor.App.Tests -c 
 `LargeFile`：打开一个大 JSON，测打开并显示、每次按键、每次翻页的耗时（主线程）。参数：
 `PERF_SHAPE`（`minified` 整个文件一行 / `pretty` 格式化成多行）、`PERF_RECORDS`（对象个数，默认 21000；
 单行 3.65 MB 约 27700）、`PERF_EXT`（默认 `.json`，`.txt` 不做语法高亮）、`PERF_WRAP=0`（不自动换行）、
-`PERF_ASCII=1`（不含中文）、`PERF_CARET`（输入的位置）、`PERF_SETTLE_MS`（先等后台语法分析做完）。
+`PERF_ASCII=1`（不含中文）、`PERF_CARET`（输入的位置）、`PERF_SETTLE_MS`（先等后台语法分析做完）、
+`PERF_EXPAND=1`（打开后先展开为多行，即提示条上的 ✓）。
 
 ## 结果（2026-11-19，Linux + Xvfb 软件渲染，5 次取中位数）
 
@@ -97,6 +98,7 @@ LTE_PERF=1 LTE_PERF_OUT=perf.tsv dotnet test tests/LightTextEditor.App.Tests -c 
 | 无头基准 `LargeFile`（3.67 MB，`PERF_RECORDS=27700`） | 打开并显示 | 59.4 s | 0.22 s |
 | | 每次按键 | 62.4 s | 77 ms（在行中间输入 93 ms） |
 | | 不自动换行时打开并显示 | 14.5 s | 0.18 s |
+| | 打开后点 ✓ 展开为多行并显示 | — | 0.58 s（展开后的托管堆约 170 MB：多行文本、撤销记录和语法分析结果） |
 
 无头基准里小文件每次按键本身也要 25~40 ms（软件渲染整个窗口）。格式化成多行的同样大小的 JSON 原来就不卡（每次按键约 60 ms，后台语法分析约 4 s CPU），这次没有变化。
 

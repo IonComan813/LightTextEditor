@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using LightTextEditor.App.Services;
+using LightTextEditor.App.ViewModels;
 using LightTextEditor.Core.Text;
 
 namespace LightTextEditor.App.Views;
@@ -171,6 +172,8 @@ public partial class MainWindow
     private void OnReplaceClick(object? sender, RoutedEventArgs e) => OpenSearch(replace: true);
     private async void OnGoToLineClick(object? sender, RoutedEventArgs e) => await GoToLineAsync();
     private void OnInsertDateTimeClick(object? sender, RoutedEventArgs e) => InsertDateTime();
+    private void OnExpandJsonClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) ReformatJson(tab, expand: true); }
+    private void OnCompactJsonClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) ReformatJson(tab, expand: false); }
 
     private void OpenSearch(bool replace)
     {
@@ -200,6 +203,45 @@ public partial class MainWindow
         editor.TextArea.Caret.Column = 1;
         editor.TextArea.Caret.BringCaretToView();
         FocusEditor();
+    }
+
+    /// <summary>
+    /// 展开（格式化为多行）或压缩（合并为一行）JSON：有选中的文字时只处理选中的部分，否则处理整篇
+    /// （<paramref name="wholeDocument"/> 为 true 时总是整篇）。一次修改，可以撤销；不是有效的 JSON 时提示原因，不改动。
+    /// 只增删字符串以外的空白，字符串和数字原样保留（见 <see cref="JsonText"/>）。
+    /// </summary>
+    internal bool ReformatJson(DocumentTab tab, bool expand, bool wholeDocument = false)
+    {
+        if (tab.IsPreviewing) SetPreview(tab, false);
+        var editor = tab.Editor;
+        var document = editor.Document;
+        bool selection = !wholeDocument && editor.SelectionLength > 0;
+        int start = selection ? editor.SelectionStart : 0;
+        int length = selection ? editor.SelectionLength : document.TextLength;
+        var text = document.GetText(start, length);
+        var verb = expand ? "展开" : "压缩";
+
+        if (!JsonText.Validate(text, out var error))
+        {
+            ShowTransientNotice(tab.Doc, new DocumentNotice($"无法{verb}：{(selection ? "选中的文字" : "当前内容")}不是有效的 JSON",
+                error ?? "", NoticeSeverity.Warning, []), seconds: 6);
+            return false;
+        }
+
+        var newLine = tab.Doc.LineEnding.ToNewLineString();
+        var result = expand ? JsonText.Format(text, editor.Options.IndentationString, newLine) : JsonText.Minify(text);
+        if (text.EndsWith('\n') || text.EndsWith('\r')) result += newLine; // 保留末尾的换行
+        if (result != text)
+        {
+            document.Replace(start, length, result); // 一次修改，Ctrl+Z 撤销
+            if (selection) editor.Select(start, result.Length);
+            else editor.CaretOffset = 0;
+            editor.TextArea.Caret.BringCaretToView();
+        }
+        ShowTransientNotice(tab.Doc, new DocumentNotice(expand ? "已展开为多行" : "已压缩为一行",
+            result == text ? "内容没有变化。" : "按 Ctrl+Z 可以撤销；保存后才会写入文件。", NoticeSeverity.Success, []));
+        FocusEditor();
+        return true;
     }
 
     private void InsertDateTime()

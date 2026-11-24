@@ -30,14 +30,18 @@ public class LongLineTests
         return (window, library);
     }
 
-    /// <summary>一行很长的 JSON（没有换行），长度正好是 <paramref name="length"/>。</summary>
+    /// <summary>一行很长的有效 JSON（没有换行），长度正好是 <paramref name="length"/>（最后用一个字符串元素补齐）。</summary>
     internal static string LongJson(int length)
     {
         var sb = new StringBuilder(length + 64).Append('[');
-        for (int i = 0; sb.Length < length; i++)
-            sb.Append($"{{\"id\":{i},\"name\":\"user {i}\",\"tags\":[\"a\",\"b\"]}},");
-        sb.Length = length - 1;
-        return sb.Append(']').ToString();
+        for (int i = 0; ; i++)
+        {
+            var item = $"{{\"id\":{i},\"name\":\"user {i}\",\"tags\":[\"a\",\"b\"]}},";
+            if (sb.Length + item.Length + 3 > length) break;
+            sb.Append(item);
+        }
+        int padding = length - sb.Length - 3; // 引号两个 + ']'
+        return sb.Append('"').Append('x', padding).Append("\"]").ToString();
     }
 
     private static async Task<DocumentTab> OpenAsync(MainWindow window, string library, string text, string ext = ".json")
@@ -350,10 +354,14 @@ public class LongLineShots
         window.Initialize([]);
         window.Show();
         var path = Path.Combine(library, "data.json");
-        File.WriteAllText(path, LongLineTests.LongJson(2_000_000) + "\n{\"next\": \"line\"}\n");
+        File.WriteAllText(path, LongLineTests.LongJson(2_000_000) + "\n");
         await window.OpenFilesAsync([path]);
         var editor = window.ActiveTab!.Editor;
         editor.TextArea.Focus();
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"long-line-{(wordWrap ? "wrap" : "nowrap")}-opened.png"));
+        window.ActiveTab.Doc.Notice = null;
         editor.CaretOffset = 1_000_000;
         editor.TextArea.Caret.BringCaretToView();
         Dispatcher.UIThread.RunJobs();

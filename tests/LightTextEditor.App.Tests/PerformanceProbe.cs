@@ -189,6 +189,18 @@ public class PerformanceProbe
         Dispatcher.UIThread.RunJobs();
         Report(scenario, "打开并显示", sw.Elapsed.TotalMilliseconds, "ms");
 
+        // PERF_EXPAND=1：打开后立即展开为多行（提示条上的 ✓），再测输入、翻页
+        if (Environment.GetEnvironmentVariable("PERF_EXPAND") == "1")
+        {
+            sw.Restart();
+            Assert.True(window.ReformatJson(window.ActiveTab!, expand: true, wholeDocument: true));
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+            Report(scenario, "展开为多行并显示", sw.Elapsed.TotalMilliseconds, "ms");
+        }
+
+
         // PERF_SETTLE_MS：先等这么久（让后台的语法分析做完）再测输入
         if (int.TryParse(Environment.GetEnvironmentVariable("PERF_SETTLE_MS"), out var settle))
             for (var until = DateTime.UtcNow.AddMilliseconds(settle); DateTime.UtcNow < until;) { await Task.Delay(50); Dispatcher.UIThread.RunJobs(); }
