@@ -24,7 +24,8 @@ public readonly record struct LayoutResult(string? Text, string? Error, int Kept
 }
 
 /// <summary>
-/// 展开（还原为多行）和压缩（合并为单行）JSON、CSS、JavaScript。
+/// 展开（还原为多行）和压缩（合并为单行）JSON、CSS、JavaScript（按后缀判断，其他文件都不支持）。
+/// 压缩只去掉空白和换行，不改变量名、不删注释。
 /// <para>
 /// 只增删字符串、注释、正则表达式以外的空白（JavaScript 压缩时可能补分号，见下），不改动其他任何字符；遇到拿不准的写法（没有结束的字符串、
 /// 括号不配对、JavaScript 里的 JSX 等）就不改动并说明原因，保证不会改变代码的含义：
@@ -42,20 +43,15 @@ public readonly record struct LayoutResult(string? Text, string? Error, int Kept
 public static class CodeLayout
 {
     /// <summary>
-    /// 按后缀和内容判断文件类型：.json / .css / .js .mjs .cjs，其他后缀的内容以 { 或 [ 开头时按 JSON 处理。不支持时为 null。
+    /// 按后缀判断文件类型：.json、.css、.js / .mjs / .cjs。其他文件都不支持（内容看起来像 JSON 也不算），返回 null。
     /// </summary>
-    public static CodeLanguage? LanguageFor(string extension, string text)
+    public static CodeLanguage? LanguageFor(string extension) => extension.ToLowerInvariant() switch
     {
-        switch (extension.ToLowerInvariant())
-        {
-            case ".json": return CodeLanguage.Json;
-            case ".css": return CodeLanguage.Css;
-            case ".js" or ".mjs" or ".cjs": return CodeLanguage.JavaScript;
-        }
-        int i = 0;
-        while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
-        return i < text.Length && text[i] is '{' or '[' ? CodeLanguage.Json : null;
-    }
+        ".json" => CodeLanguage.Json,
+        ".css" => CodeLanguage.Css,
+        ".js" or ".mjs" or ".cjs" => CodeLanguage.JavaScript,
+        _ => null,
+    };
 
     public static string DisplayName(CodeLanguage language) => language switch
     {

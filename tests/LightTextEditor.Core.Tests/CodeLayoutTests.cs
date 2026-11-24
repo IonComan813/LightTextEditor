@@ -14,14 +14,25 @@ public class CodeLayoutTests
     private static LayoutResult Compact(CodeLanguage language, string text) => CodeLayout.Compact(language, text, "\n");
 
     [Theory]
-    [InlineData(".json", "x", CodeLanguage.Json)]
-    [InlineData(".CSS", "", CodeLanguage.Css)]
-    [InlineData(".mjs", "", CodeLanguage.JavaScript)]
-    [InlineData(".txt", "  [1,2]", CodeLanguage.Json)]  // 其他后缀：内容以 { [ 开头时按 JSON
-    [InlineData(".log", "hello", null)]
-    [InlineData(".html", "<p>a</p>", null)]
-    public void LanguageFor(string extension, string text, CodeLanguage? expected) =>
-        Assert.Equal(expected, CodeLayout.LanguageFor(extension, text));
+    [InlineData(".json", CodeLanguage.Json)]
+    [InlineData(".CSS", CodeLanguage.Css)]
+    [InlineData(".mjs", CodeLanguage.JavaScript)]
+    [InlineData(".txt", null)]   // 其他文件都不支持，内容像 JSON 也不算
+    [InlineData(".log", null)]
+    [InlineData(".html", null)]
+    [InlineData("", null)]
+    public void LanguageFor(string extension, CodeLanguage? expected) =>
+        Assert.Equal(expected, CodeLayout.LanguageFor(extension));
+
+    [Fact]
+    public void Compact_KeepsCommentsAndNames()
+    {
+        // 压缩只去掉空白，不删注释、不改变量名
+        Assert.Equal("/* 说明 */ a{color:red}", CodeLayout.Compact(CodeLanguage.Css, "/* 说明 */\na {\n  color:red\n}\n").Text);
+        // （注释后的换行保留：可能影响自动插入分号）
+        Assert.Equal("/* 说明 */\nfunction add(first,second){return first + second}",
+            CodeLayout.Compact(CodeLanguage.JavaScript, "/* 说明 */\nfunction add(first, second) {\n  return first + second\n}\n").Text);
+    }
 
     // ───────────── CSS ─────────────
 

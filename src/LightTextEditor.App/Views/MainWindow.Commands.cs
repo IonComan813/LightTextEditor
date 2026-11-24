@@ -217,10 +217,10 @@ public partial class MainWindow
         var text = document.Text;
         var verb = expand ? "展开" : "压缩";
 
-        if (CodeLayout.LanguageFor(tab.Doc.Extension, text) is not { } language)
+        if (CodeLayout.LanguageFor(tab.Doc.Extension) is not { } language)
         {
             ShowTransientNotice(tab.Doc, new DocumentNotice($"无法{verb}：不支持这种文件",
-                "可以展开和压缩 JSON、CSS 和 JavaScript 文件。（HTML、XML 等在标签之间加减空白会改变显示的文字，没有支持。）",
+                "只能展开和压缩 JSON、CSS 和 JavaScript 文件（.json、.css、.js）。",
                 NoticeSeverity.Warning, []), seconds: 8);
             return false;
         }

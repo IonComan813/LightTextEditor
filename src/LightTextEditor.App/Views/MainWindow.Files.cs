@@ -148,7 +148,7 @@ public partial class MainWindow
                 $"此文件混用了多种换行符，主要为 {loaded.LineEnding.DisplayName()}。可在状态栏统一。",
                 NoticeSeverity.Informational, []);
         if (doc.Notice is null && IsCompressedToLongLines(doc.Document) &&
-            CodeLayout.LanguageFor(doc.Extension, loaded.Text) is { } language && CodeLayout.CanExpand(language, loaded.Text))
+            CodeLayout.LanguageFor(doc.Extension) is { } language && CodeLayout.CanExpand(language, loaded.Text))
             doc.Notice = CompressedFileNotice(tab);
         return tab;
     }

@@ -92,7 +92,6 @@ public class ReformatTests
     }
 
     [AvaloniaTheory]
-    [InlineData("dump.txt", "json", false)]  // .txt 里的 JSON 也识别；.txt 本来就没有高亮
     [InlineData("bundle.min.js", "js", true)]
     [InlineData("site.min.css", "css", true)]
     public async Task OtherCompressedFiles_AreAlsoRecognized(string name, string kind, bool highlighted)
@@ -100,7 +99,6 @@ public class ReformatTests
         var (window, library) = CreateWindow();
         var text = kind switch
         {
-            "json" => LongLineTests.LongJson(50_000),
             "js" => Repeat(MinifiedJs, 50_000),
             _ => Repeat("a.b{color:red;background:url(data:x;y)}@media (max-width:1px){c{d:e}}", 50_000),
         };
@@ -116,6 +114,7 @@ public class ReformatTests
     [AvaloniaTheory]
     [InlineData("pretty.json")] // 已经是多行
     [InlineData("long.log")]    // 很长的一行，但不是能展开的文件
+    [InlineData("dump.txt")]    // 其他后缀：内容是压缩的 JSON 也不支持、不提示
     [InlineData("app.js")]      // 一行很长的 JavaScript，但含有 JSX：不能可靠地展开，不提示
     public async Task OtherFiles_DoNotAsk(string name)
     {
@@ -124,6 +123,7 @@ public class ReformatTests
         {
             "pretty.json" => JsonText.Format(LongLineTests.LongJson(50_000), "  ", "\n"),
             "long.log" => Repeat("2026-11-24 12:00:00 INFO something happened; ", 50_000),
+            "dump.txt" => LongLineTests.LongJson(50_000),
             _ => Repeat("x=<div>a;b</div>;", 50_000),
         };
         var tab = await OpenAsync(window, library, name, text);
@@ -203,5 +203,11 @@ public class ReformatTests
         ClickMenu(window, "展开为多行");
         Assert.Equal("<p>a</p>\n<p>b</p>", tab.Editor.Document.Text);
         Assert.Equal("无法展开：不支持这种文件", tab.Doc.Notice?.Title);
+
+        // .txt 里即使是 JSON 也不压缩
+        var txt = await OpenAsync(window, library, "data.txt", "{\n  \"a\": 1\n}");
+        ClickMenu(window, "压缩为单行");
+        Assert.Equal("{\n  \"a\": 1\n}", txt.Editor.Document.Text);
+        Assert.Equal("无法压缩：不支持这种文件", txt.Doc.Notice?.Title);
     }
 }
