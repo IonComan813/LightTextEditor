@@ -184,6 +184,11 @@ internal sealed class MarkdownRegistryOptions : IRegistryOptions
 /// <summary>
 /// 一个编辑器的语法高亮。纯文本不安装 TextMate（不占用内存、不做后台着色）；
 /// Markdown 只加载文档里代码块用到的语言，之后写了新语言的代码块时（停止输入片刻后）再补上。
+/// <para>
+/// 文档里有超长的行（超过 <see cref="LongLineWindow.Threshold"/>，如压缩成一行的 JSON）时也不高亮：
+/// TextMate 每次修改都要重新分析这一行的前一万个字符（有时在界面线程上），着色时每个记号又要遍历整行的显示元素，
+/// 按一次键要几百毫秒；而这样的行本来也只有开头一万个字符能着色。长行都去掉后（如整篇替换为格式化后的文本）自动恢复。
+/// </para>
 /// </summary>
 internal sealed class EditorHighlighter : IDisposable
 {
@@ -199,6 +204,9 @@ internal sealed class EditorHighlighter : IDisposable
     /// <summary>当前是否安装了 TextMate（测试用）。</summary>
     internal bool IsInstalled => _installation is not null;
 
+    /// <summary>因为文档里有超长的行而暂停了高亮。</summary>
+    internal bool IsSuspendedForLongLines { get; private set; }
+
     /// <summary>Markdown 时实际提供的语法（含依赖；测试用）。</summary>
     internal IReadOnlySet<string>? MarkdownScopes => _markdownOptions?.AllowedScopes;
 
@@ -213,12 +221,20 @@ internal sealed class EditorHighlighter : IDisposable
     public void SetLanguage(string extension)
     {
         var scope = SyntaxHighlighting.ScopeFor(extension);
-        if (scope == Scope && (_installation is not null || scope is null)) return;
+        if (scope == Scope && (_installation is not null || scope is null || IsSuspendedForLongLines)) return;
         Scope = scope;
+        Apply();
+    }
 
-        if (scope is null)
+    /// <summary>按当前语言安装 / 卸载 TextMate。</summary>
+    private void Apply()
+    {
+        var scope = Scope;
+        IsSuspendedForLongLines = scope is not null && HasLongLine(_editor.Document);
+        if (scope is null || IsSuspendedForLongLines)
         {
             Uninstall();
+            _markdownOptions = null;
             return;
         }
         if (scope == SyntaxHighlighting.MarkdownScope)
@@ -244,6 +260,7 @@ internal sealed class EditorHighlighter : IDisposable
             _installation = _editor.InstallTextMate(options);
             _installation.SetTheme(SyntaxHighlighting.CurrentTheme);
             _installation.SetGrammar(Scope);
+            LongLineWindow.MoveToEnd(_editor); // 超长行的拆分要在着色之后
         }
         catch (Exception)
         {
@@ -260,8 +277,38 @@ internal sealed class EditorHighlighter : IDisposable
 
     // ───────────── Markdown：新出现的代码块语言 ─────────────
 
+    /// <summary>文档里有没有超长的行。只看每行的长度，不读文字。</summary>
+    private static bool HasLongLine(TextDocument document)
+    {
+        if (document.TextLength <= LongLineWindow.Threshold) return false;
+        foreach (var line in document.Lines)
+            if (line.Length > LongLineWindow.Threshold) return true;
+        return false;
+    }
+
     private void OnDocumentChanged(object? sender, DocumentChangeEventArgs e)
     {
+        if (Scope is not null)
+        {
+            if (!IsSuspendedForLongLines)
+            {
+                // 修改后出现了超长的行（如粘贴了一大段没有换行的文字）：暂停高亮
+                var document = _editor.Document;
+                var line = document.GetLineByOffset(Math.Min(e.Offset + e.InsertionLength, document.TextLength));
+                if (document.GetLineByOffset(e.Offset).Length > LongLineWindow.Threshold || line.Length > LongLineWindow.Threshold)
+                {
+                    Apply();
+                    return;
+                }
+            }
+            else if (e.RemovalLength > LongLineWindow.Threshold || e.InsertionLength > LongLineWindow.Threshold)
+            {
+                // 删掉或替换了一大段：长行可能都没了，重新判断
+                Apply();
+                return;
+            }
+        }
+
         if (_markdownOptions is null) return;
         // 只在可能改变代码块语言 / 行内 HTML 的修改后重新扫描：改动所在行以 ``` / ~~~ 开头或含 <，或一次性改了很多文字（粘贴、重新加载）
         bool relevant = e.InsertionLength > 200 || e.RemovalLength > 200;

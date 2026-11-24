@@ -82,12 +82,32 @@ internal static class EditorPreedit
 
         public override bool SupportsSurroundingText => true;
 
+        /// <summary>周围文字最多取光标前后各这么多字符：超长的行（几百万字符）不必每次都整行复制给输入法。</summary>
+        private const int SurroundingRadius = 1000;
+
+        /// <summary>周围文字从行内第几个字符开始（行不长时为 0，即整行）。</summary>
+        private int SurroundingStart
+        {
+            get
+            {
+                var line = _textArea.Document.GetLineByNumber(_textArea.Caret.Line);
+                if (line.Length <= 2 * SurroundingRadius) return 0;
+                int column = _textArea.Caret.Offset - line.Offset;
+                int start = Math.Clamp(column - SurroundingRadius, 0, line.Length - 2 * SurroundingRadius);
+                // 不从代理对中间开始
+                if (start > 0 && char.IsLowSurrogate(_textArea.Document.GetCharAt(line.Offset + start))) start--;
+                return start;
+            }
+        }
+
         public override string SurroundingText
         {
             get
             {
                 var line = _textArea.Document.GetLineByNumber(_textArea.Caret.Line);
-                return _textArea.Document.GetText(line.Offset, line.Length);
+                int start = SurroundingStart;
+                int length = Math.Min(line.Length - start, 2 * SurroundingRadius + 1);
+                return _textArea.Document.GetText(line.Offset + start, length);
             }
         }
 
@@ -108,16 +128,17 @@ internal static class EditorPreedit
         {
             get
             {
-                int column = _textArea.Caret.Position.Column;
+                int column = _textArea.Caret.Position.Column - SurroundingStart;
                 return new TextSelection(column, column + _textArea.Selection.Length);
             }
             set
             {
                 var selection = _textArea.Selection;
                 if (selection.StartPosition.Line == 0) return;
+                int start = SurroundingStart;
                 _textArea.Selection = selection.StartSelectionOrSetEndpoint(
-                    new TextViewPosition(selection.StartPosition.Line, value.Start),
-                    new TextViewPosition(selection.StartPosition.Line, value.End));
+                    new TextViewPosition(selection.StartPosition.Line, value.Start + start),
+                    new TextViewPosition(selection.StartPosition.Line, value.End + start));
             }
         }
 
