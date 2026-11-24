@@ -220,6 +220,16 @@ public class LibraryTests
         LibraryShortcuts.Ensure(library, third);
         Assert.Equal(["a／hdrplayer／readme.md", "b／docs／readme.md", "c／hdrplayer／readme.md"], Names());
 
+        // 两层父文件夹名也相同：加编号
+        var fourth = Make("x", "c", "hdrplayer", "readme.md");
+        LibraryShortcuts.Ensure(library, fourth);
+        Assert.Equal(["a／hdrplayer／readme.md", "b／docs／readme.md", "c／hdrplayer／readme (2).md", "c／hdrplayer／readme.md"], Names());
+        Assert.Equal(fourth, ResolveShortcut(library, "c／hdrplayer／readme (2).md"));
+        var fifth = Make("y", "c", "hdrplayer", "readme.md");
+        LibraryShortcuts.Ensure(library, fifth); // 已有的不再改名
+        Assert.Equal(["a／hdrplayer／readme.md", "b／docs／readme.md", "c／hdrplayer／readme (2).md", "c／hdrplayer／readme (3).md", "c／hdrplayer／readme.md"], Names());
+        Assert.Equal(fifth, ResolveShortcut(library, "c／hdrplayer／readme (3).md"));
+
         // 都仍指向原来的文件；别的文件名不受影响
         Assert.Equal(first, ResolveShortcut(library, "a／hdrplayer／readme.md"));
         Assert.Equal(third, ResolveShortcut(library, "c／hdrplayer／readme.md"));

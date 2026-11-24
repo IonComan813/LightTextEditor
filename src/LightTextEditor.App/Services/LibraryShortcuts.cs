@@ -35,8 +35,8 @@ internal static class LibraryShortcuts
     /// 为笔记库外的文件创建快捷方式（已有指向它的快捷方式时不重复创建）。返回快捷方式路径，失败时为 null。
     /// <para>
     /// 名字取文件名；已有指向其他同名文件的快捷方式时，这一组同名的快捷方式都在文件名前加上父文件夹名
-    /// （如“hdrplayer／readme.md”“docs／readme.md”），父文件夹也同名时再加一层，直到能区分为止。
-    /// 自动进行，不提示。
+    /// （如“hdrplayer／readme.md”“docs／readme.md”），父文件夹也同名时再加一层；两层仍同名时加编号
+    /// （“a／hdrplayer／readme (2).md”）。自动进行，不提示。
     /// </para>
     /// </summary>
     public static string? Ensure(string libraryPath, string targetPath)
@@ -100,19 +100,29 @@ internal static class LibraryShortcuts
         return name;
     }
 
-    /// <summary>至少要加几层父文件夹名才能把这些同名文件区分开（最多 8 层，仍不能区分时由编号区分）。</summary>
+    /// <summary>快捷方式名里最多加几层父文件夹名；还区分不开时加编号“(2)”。</summary>
+    internal const int MaxParentLevels = 2;
+
+    /// <summary>加一层父文件夹名能区分这些同名文件时为 1，否则为 2（两层仍同名的由编号区分）。</summary>
     private static int LevelsToDistinguish(IReadOnlyList<string> targets)
     {
         var comparer = PathComparison == StringComparison.Ordinal ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
-        for (int levels = 1; levels <= 8; levels++)
-            if (targets.Select(t => NameWithParents(t, levels)).Distinct(comparer).Count() == targets.Count)
-                return levels;
-        return 8;
+        return targets.Select(t => NameWithParents(t, 1)).Distinct(comparer).Count() == targets.Count ? 1 : MaxParentLevels;
+    }
+
+    /// <summary><paramref name="current"/> 就是 <paramref name="name"/>，或是它加了编号的“名称 (2).md”。</summary>
+    private static bool IsNameOrNumbered(string current, string name)
+    {
+        if (string.Equals(current, name, PathComparison)) return true;
+        var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(Path.GetFileNameWithoutExtension(name)) + @" \(\d+\)" +
+                      System.Text.RegularExpressions.Regex.Escape(Path.GetExtension(name)) + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(current, pattern,
+            PathComparison == StringComparison.Ordinal ? default : System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
     /// <summary>
-    /// 把已有的快捷方式改成新名字。只改程序自己起的名字（文件名本身、带父文件夹的名字、旧的“名称 (2).md”），
-    /// 用户自己改过的名字不动；新名字被占用时也不动。
+    /// 把已有的快捷方式改成新名字。只改程序自己起的名字（文件名本身、带父文件夹的名字，及它们加了编号的“(2)”），
+    /// 用户自己改过的名字不动。已经是新名字（或新名字加编号）时不动；新名字被占用时加编号。
     /// </summary>
     private static void RenameShortcut(string entry, string target, string newName)
     {
@@ -120,19 +130,12 @@ internal static class LibraryShortcuts
         var current = Path.GetFileName(entry);
         if (ShortcutSuffix.Length > 0 && current.EndsWith(ShortcutSuffix, StringComparison.OrdinalIgnoreCase))
             current = current[..^ShortcutSuffix.Length];
-        if (string.Equals(current, newName, PathComparison)) return;
+        if (IsNameOrNumbered(current, newName)) return;
 
-        var fileName = Path.GetFileName(target);
-        bool ours = Enumerable.Range(0, 9).Any(levels => string.Equals(current, NameWithParents(target, levels), PathComparison))
-            || System.Text.RegularExpressions.Regex.IsMatch(current,
-                "^" + System.Text.RegularExpressions.Regex.Escape(Path.GetFileNameWithoutExtension(fileName)) + @" \(\d+\)" +
-                System.Text.RegularExpressions.Regex.Escape(Path.GetExtension(fileName)) + "$",
-                PathComparison == StringComparison.Ordinal ? default : System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        bool ours = Enumerable.Range(0, MaxParentLevels + 1).Any(levels => IsNameOrNumbered(current, NameWithParents(target, levels)));
         if (!ours) return;
 
-        var newPath = Path.Combine(folder, newName + ShortcutSuffix);
-        if (File.Exists(newPath) || Directory.Exists(newPath) || new FileInfo(newPath).LinkTarget is not null) return;
-        File.Move(entry, newPath); // 移动的是快捷方式 / 符号链接本身，不是它指向的文件
+        File.Move(entry, UniqueShortcutPath(folder, newName)); // 移动的是快捷方式 / 符号链接本身，不是它指向的文件
     }
 
     /// <summary>删除指向该文件的快捷方式。</summary>
