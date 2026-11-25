@@ -175,7 +175,7 @@ public class FindPanelTests
             Assert.NotEqual(selection.Color, brush.Color);
             Assert.True(brush.Color.R > brush.Color.G && brush.Color.G > brush.Color.B); // 橙色
             var bounds = d.Geometry!.Bounds;
-            Assert.InRange(bounds.Height, tab.Editor.FontSize - 0.5, lineHeight - 0.5); // 文字高，比整行矮
+            Assert.InRange(bounds.Height, 4, lineHeight - 1); // 比整行矮
         });
 
         Press(window, Key.Escape);
@@ -318,5 +318,58 @@ public class FindPanelAvoidTests
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         Dispatcher.UIThread.RunJobs();
+    }
+}
+
+public class FindHighlightInkTests
+{
+    /// <summary>橙色的上下边缘对齐字形的上下边缘（中文、英文各自按画它的字体），并且在整行高的选中背景之内。</summary>
+    [AvaloniaTheory]
+    [InlineData("狐狸", "敏捷的棕色狐狸跳过了懒狗")]
+    [InlineData("HdgHdg", "xx HdgHdg yy")]
+    public void OrangeEdges_MatchTheGlyphInk(string needle, string text)
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "findink-" + Guid.NewGuid().ToString("N"));
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        var window = new MainWindow { Width = 1000, Height = 600 };
+        window.Initialize([]);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var tab = window.ActiveTab!;
+        tab.Doc.Document.Text = text;
+        tab.Editor.TextArea.Focus();
+        Dispatcher.UIThread.RunJobs();
+        window.KeyPress(Key.F, RawInputModifiers.Control, PhysicalKey.None, null);
+        Dispatcher.UIThread.RunJobs();
+        window.FindPanel.SearchPattern = needle;
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+
+        var view = tab.Editor.TextArea.TextView;
+        var renderer = view.BackgroundRenderers.Single(r => r.GetType().DeclaringType == typeof(FindPanel));
+        var group = new DrawingGroup();
+        using (var context = group.Open()) renderer.Draw(view, context);
+        var orange = Assert.Single(group.Children.OfType<GeometryDrawing>()).Geometry!.Bounds;
+
+        // 画出这几个字的那段文字的实际墨迹（行坐标）
+        var line = view.VisualLines[0];
+        var textLine = line.TextLines[0];
+        int start = text.IndexOf(needle, StringComparison.Ordinal);
+        int column = 0;
+        Rect? ink = null;
+        foreach (var run in textLine.TextRuns)
+        {
+            int runStart = column;
+            column += run.Length;
+            if (run is not Avalonia.Media.TextFormatting.ShapedTextRun shaped || column <= start || runStart >= start + needle.Length) continue;
+            var glyphRun = shaped.GlyphRun;
+            var r = glyphRun.InkBounds.Translate(new Vector(0, textLine.Baseline - glyphRun.BaselineOrigin.Y));
+            ink = ink is { } i ? i.Union(r) : r;
+        }
+        Assert.NotNull(ink);
+        Assert.InRange(orange.Top, ink.Value.Top - 1.5, ink.Value.Top + 1.5);
+        Assert.InRange(orange.Bottom, ink.Value.Bottom - 1.5, ink.Value.Bottom + 1.5);
+        // 选中背景（整行高）上下都比橙色多出一些
+        Assert.True(orange.Top > 0.5 && orange.Bottom < view.DefaultLineHeight - 0.5, $"橙色 {orange}，行高 {view.DefaultLineHeight}");
     }
 }

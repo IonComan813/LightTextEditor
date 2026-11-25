@@ -558,7 +558,8 @@ public partial class FindPanel : UserControl
     // ───────────────────────── 标出匹配项 ─────────────────────────
 
     /// <summary>
-    /// 用橙色标出屏幕上的所有匹配项（包括当前项）。橙色只有文字那么高，比选中文字的蓝色（整行高）矮一些；
+    /// 用橙色标出屏幕上的所有匹配项（包括当前项）。橙色上下对齐字形的上下边缘（见 <see cref="TextInkBand"/>），
+    /// 比选中文字的蓝色（整行高）矮一些；
     /// 画在选中文字的下面，所以当前项是橙色上叠着蓝色，手动选中的其他文字只有蓝色。
     /// 超长的行只看显示出来的一段（折叠掉的部分里可能有几万个匹配项）。
     /// </summary>
@@ -576,7 +577,6 @@ public partial class FindPanel : UserControl
             var area = editor.TextArea;
             var brush = MatchBrush;
             double radius = area.SelectionCornerRadius;
-            double fontSize = editor.FontSize;
 
             foreach (var line in textView.VisualLines)
             {
@@ -590,25 +590,13 @@ public partial class FindPanel : UserControl
                     int from = Math.Max(segment.Offset, start), to = Math.Min(segment.EndOffset, end);
                     if (to <= from) continue;
                     var piece = new TextSegment { StartOffset = from, EndOffset = to };
+                    int lineStart = line.FirstDocumentLine.Offset;
+                    int startColumn = line.GetVisualColumn(from - lineStart), endColumn = line.GetVisualColumn(to - lineStart);
                     foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, piece))
-                        drawingContext.DrawRectangle(brush, null, TextHeightOnly(textView, line, rect, fontSize), radius, radius);
+                        drawingContext.DrawRectangle(brush, null,
+                            TextInkBand.Shrink(textView, line, rect, startColumn, endColumn), radius, radius);
                 }
             }
-        }
-
-        /// <summary>
-        /// 把整行高的矩形收成文字的高度：以基线为准取一个字号高（中文字形基本占满这个高度），
-        /// 基线上下按默认字体的比例分配。
-        /// </summary>
-        internal static Rect TextHeightOnly(TextView textView, VisualLine line, Rect rect, double fontSize)
-        {
-            double scroll = textView.ScrollOffset.Y;
-            var textLine = line.GetTextLineByVisualYPosition(rect.Center.Y + scroll);
-            double baseline = line.GetTextLineVisualYPosition(textLine, VisualYPosition.Baseline) - scroll;
-            double ratio = textView.DefaultLineHeight > 0 ? textView.DefaultBaseline / textView.DefaultLineHeight : 0.8;
-            double top = Math.Max(rect.Top, baseline - fontSize * ratio);
-            double bottom = Math.Min(rect.Bottom, top + fontSize);
-            return bottom > top ? new Rect(rect.Left, top, rect.Width, bottom - top) : rect;
         }
 
         /// <summary>这一显示行实际显示的文档区间（不含超长行折叠掉的部分）。</summary>
