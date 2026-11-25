@@ -45,6 +45,7 @@ public partial class MainWindow
             tab.IsPreviewing = true;
             if (tab == _active)
             {
+                FindPanel.Close(); // 查找只在源码中进行
                 tab.Editor.IsVisible = false;
                 tab.Preview.IsVisible = true;
                 tab.Preview.Focus();

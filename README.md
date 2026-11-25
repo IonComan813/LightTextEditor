@@ -95,7 +95,8 @@ GitHub Actions（`.github/workflows/release.yml`）自动构建两种 Windows �
 | Ctrl+W / 鼠标中键 | 关闭标签页 |
 | Ctrl+Tab / Ctrl+Shift+Tab | 下一个 / 上一个标签页 |
 | Ctrl+1…9 | 切换到第 N 个标签页 |
-| Ctrl+F / Ctrl+H | 查找 / 替换 |
+| Ctrl+F / Ctrl+H | 查找 / 替换（面板可以拖动） |
+| F3 / Shift+F3 | 查找下一个 / 上一个 |
 | Ctrl+G | 转到行 |
 | Ctrl+E | Markdown 源码 / 预览切换（预览中按 Esc 或双击返回编辑） |
 | F5 | 插入日期时间 |

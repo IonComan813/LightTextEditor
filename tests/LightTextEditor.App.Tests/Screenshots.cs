@@ -19,6 +19,41 @@ public class Screenshots
     [AvaloniaTheory]
     [InlineData("light")]
     [InlineData("dark")]
+    public void FindPanel(string theme)
+    {
+        var dir = Environment.GetEnvironmentVariable("LTE_SCREENSHOT_DIR");
+        if (string.IsNullOrEmpty(dir)) return;
+        Directory.CreateDirectory(dir);
+
+        Avalonia.Application.Current!.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        var library = Path.Combine(TestAppBuilder.Root, "shots-find-" + theme);
+        Directory.CreateDirectory(library);
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        var window = new MainWindow { Width = 1000, Height = 560 };
+        window.Initialize([]);
+        window.Show();
+        var tab = window.ActiveTab!;
+        tab.Doc.Document.Text = string.Join("\n", Enumerable.Range(1, 30).Select(i =>
+            $"第 {i} 行：The quick brown fox jumps over the lazy dog. 敏捷的棕色狐狸跳过了懒狗。"));
+        tab.Editor.TextArea.Focus();
+        Dispatcher.UIThread.RunJobs();
+
+        window.KeyPress(Key.H, RawInputModifiers.Control, PhysicalKey.H, null);
+        Dispatcher.UIThread.RunJobs();
+        window.KeyTextInput("狐狸");
+        Dispatcher.UIThread.RunJobs();
+        window.FindPanel.ReplacePattern = "gjpqy 格局"; // 有下伸部分的字母：下半部分不能被截掉
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        window.CaptureRenderedFrame()!.Save(Path.Combine(dir, $"find-{theme}.png"));
+        window.Close();
+    }
+
+    [AvaloniaTheory]
+    [InlineData("light")]
+    [InlineData("dark")]
     public async Task MainWindow(string theme)
     {
         var dir = Environment.GetEnvironmentVariable("LTE_SCREENSHOT_DIR");

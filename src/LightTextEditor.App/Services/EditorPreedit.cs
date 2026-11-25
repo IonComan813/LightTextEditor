@@ -29,9 +29,12 @@ internal static class EditorPreedit
     {
         var client = new PreeditClient(textArea);
         Clients.AddOrUpdate(textArea, client);
-        // AvaloniaEdit 用类处理程序提供自己的客户端；实例处理程序在它之后执行，把它换掉
+        // AvaloniaEdit 用类处理程序提供自己的客户端；实例处理程序在它之后执行，把它换掉。
+        // 只换编辑器自己的：放在编辑器里的输入框（如 AvaloniaEdit 自带的查找面板）的请求也会冒泡到这里，
+        // 换掉它会让拼音和提交的文字跑到正文里
         textArea.AddHandler(InputElement.TextInputMethodClientRequestedEvent, (_, e) =>
         {
+            if (!ReferenceEquals(e.Source, textArea)) return;
             if (ImeDebugLog.IsEnabled)
                 ImeDebugLog.Write("client", $"输入法请求客户端：原来是 {e.Client?.GetType().FullName ?? "null"}，" +
                                             (textArea.IsReadOnly ? "只读，不替换" : "替换为组字客户端"));

@@ -7,7 +7,6 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using AvaloniaEdit;
-using AvaloniaEdit.Search;
 using FluentAvalonia.UI.Controls;
 using LightTextEditor.App.Services;
 using LightTextEditor.App.ViewModels;
@@ -99,6 +98,8 @@ public partial class MainWindow : Window
             if (args.Reason == FAInfoBarCloseReason.CloseButton) _active?.Doc.DismissNotice();
         };
         InitializeNoticeDrag();
+        FindPanel.DragBounds = EditorArea;
+        FindPanel.Closed += (_, _) => { if (_active is { IsPreviewing: false }) FocusEditor(); };
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         EditorArea.AddHandler(PointerWheelChangedEvent, OnEditorAreaWheel, RoutingStrategies.Bubble);
@@ -372,6 +373,8 @@ public partial class MainWindow : Window
         }
 
         _active = tab;
+        FindPanel.Editor = tab.Editor; // 查找面板跟着切到这个标签页
+        if (tab.IsPreviewing) FindPanel.Close();
         ApplyViewOptions(tab.Editor); // 后台标签页在切到前台时才同步行号、换行、缩放
         if (tab.IsPreviewing && tab.Preview is not null)
         {
@@ -845,7 +848,6 @@ public partial class MainWindow : Window
         textView.CurrentLineBackground = new SolidColorBrush(Color.FromArgb(0x14, 0x80, 0x80, 0x80));
         textView.CurrentLineBorder = new Pen(new SolidColorBrush(Color.FromArgb(0x22, 0x80, 0x80, 0x80)), 1);
 
-        SearchPanel.Install(editor);
         EditorPreedit.Install(editor.TextArea); // 输入法组字的文字（拼音）显示在光标处
         LongLineWindow.Install(editor); // 超长的行只排版光标附近的一段（否则打开、输入都会卡住）
 

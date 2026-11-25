@@ -220,11 +220,11 @@ public class LongLineTests
         var editor = tab.Editor;
         Assert.True(WindowOf(editor).End < expected); // 一开始在折叠的部分里
 
-        var panel = editor.SearchPanel!;
-        panel.SearchPattern = needle;
-        panel.Open();
+        var panel = window.FindPanel;
+        panel.Editor = editor;
+        panel.Open(replace: false);
+        panel.SearchPattern = needle; // 边输入边查找：选中第一个匹配项
         Render();
-        panel.FindNext();
         Render();
 
         Assert.Equal(needle, editor.SelectedText);

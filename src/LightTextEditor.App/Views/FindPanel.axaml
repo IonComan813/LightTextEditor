@@ -1,0 +1,106 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="LightTextEditor.App.Views.FindPanel"
+             x:CompileBindings="False">
+  <!--
+    查找 / 替换面板：浮在编辑区右上角，不透明，可以拖动（按住按钮和输入框以外的地方）。
+    不放进编辑器内部：输入框若在编辑器的可视树里，输入法会把拼音交给编辑器（见 EditorPreedit）。
+  -->
+  <UserControl.Styles>
+    <Style Selector="Button.findIcon, ToggleButton.findIcon">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Cursor" Value="Arrow" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Focusable" Value="False" />
+    </Style>
+    <Style Selector="Button.findText">
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Cursor" Value="Arrow" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Focusable" Value="False" />
+    </Style>
+    <!-- 不固定高度：Windows 的界面字体（Segoe UI、微软雅黑）行高约为字号的 1.33 倍，
+         固定 28 高、上下各留 4 时，g、j、p 的下半部分会被截掉。最小 28 高（与按钮一样），字大时自动变高 -->
+    <Style Selector="TextBox.findBox">
+      <Setter Property="Width" Value="240" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Ibeam" />
+    </Style>
+    <Style Selector="Path.findGlyph">
+      <Setter Property="Stroke" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+      <Setter Property="StrokeThickness" Value="1.2" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+    </Style>
+    <Style Selector="TextBlock#StatusText">
+      <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+    </Style>
+    <Style Selector="TextBlock#StatusText.error">
+      <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+    </Style>
+    <Style Selector="TextBlock.optionText">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border x:Name="Frame"
+          Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+          BorderBrush="{DynamicResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1"
+          CornerRadius="6" BoxShadow="0 4 14 0 #33000000" Padding="4"
+          ToolTip.Tip="可以拖动；双击空白处回到右上角" ToolTip.ShowDelay="1200">
+    <Grid ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto">
+
+      <!-- 展开 / 收起替换 -->
+      <Button Grid.Row="0" Grid.Column="0" x:Name="ReplaceToggle" Classes="findIcon"
+              Width="20" Height="28" VerticalAlignment="Top" Margin="0,0,2,0"
+              ToolTip.Tip="切换替换 (Ctrl+H)">
+        <Path x:Name="ReplaceToggleGlyph" Classes="findGlyph" Data="M0,0 L4,4 L0,8" />
+      </Button>
+
+      <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="2">
+        <TextBox x:Name="FindBox" Classes="findBox" PlaceholderText="查找" />
+        <ToggleButton x:Name="MatchCaseToggle" Classes="findIcon" ToolTip.Tip="区分大小写 (Alt+C)">
+          <TextBlock Classes="optionText" Text="Aa" />
+        </ToggleButton>
+        <ToggleButton x:Name="WholeWordToggle" Classes="findIcon" ToolTip.Tip="全字匹配 (Alt+W)">
+          <TextBlock Classes="optionText" Text="ab" TextDecorations="Underline" />
+        </ToggleButton>
+        <ToggleButton x:Name="RegexToggle" Classes="findIcon" ToolTip.Tip="正则表达式 (Alt+R)">
+          <TextBlock Classes="optionText" Text=".*" FontWeight="Bold" />
+        </ToggleButton>
+        <TextBlock x:Name="StatusText" MinWidth="84" Margin="6,0" FontSize="12"
+                   VerticalAlignment="Center" TextAlignment="Center" />
+        <Button x:Name="PreviousButton" Classes="findIcon" ToolTip.Tip="上一个 (Shift+Enter / Shift+F3)">
+          <Path Classes="findGlyph" Data="M0,4.5 L4.5,0 L9,4.5 M4.5,0 L4.5,10" />
+        </Button>
+        <Button x:Name="NextButton" Classes="findIcon" ToolTip.Tip="下一个 (Enter / F3)">
+          <Path Classes="findGlyph" Data="M0,5.5 L4.5,10 L9,5.5 M4.5,10 L4.5,0" />
+        </Button>
+        <Button x:Name="CloseButton" Classes="findIcon" ToolTip.Tip="关闭 (Esc)">
+          <Path Classes="findGlyph" Data="M0,0 L8,8 M8,0 L0,8" />
+        </Button>
+      </StackPanel>
+
+      <StackPanel Grid.Row="1" Grid.Column="1" x:Name="ReplaceRow" Orientation="Horizontal" Spacing="4"
+                  Margin="0,4,0,0" IsVisible="False">
+        <TextBox x:Name="ReplaceBox" Classes="findBox" PlaceholderText="替换为" />
+        <Button x:Name="ReplaceButton" Classes="findText" Content="替换" ToolTip.Tip="替换当前项并查找下一个 (Enter)" />
+        <Button x:Name="ReplaceAllButton" Classes="findText" Content="全部替换" ToolTip.Tip="全部替换 (Ctrl+Alt+Enter)" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>
