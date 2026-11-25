@@ -83,32 +83,25 @@ public class TextBoxFitTests
         var window = CreateWindow();
         var problems = new List<string>();
 
-        // 重命名（文件名 + 可编辑的后缀下拉框）
-        window.KeyPress(Avalonia.Input.Key.F2, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.None, null);
-        Render();
-        var dialog = FindDialog(window);
-        foreach (var (box, i) in dialog.GetVisualDescendants().OfType<TextBox>().Select((b, i) => (b, i)))
-            if (Check(box, $"重命名对话框输入框 {i}") is { } p) problems.Add(p);
-        dialog.Hide(FAContentDialogResult.None);
-        Render();
+        async Task CheckDialog<T>(string name, Func<Task<T>> show)
+        {
+            var showing = show();
+            Render();
+            var dialog = FindDialog(window);
+            var boxes = dialog.GetVisualDescendants().OfType<TextBox>().ToList();
+            Assert.NotEmpty(boxes);
+            foreach (var (box, i) in boxes.Select((b, i) => (b, i)))
+                if (Check(box, $"{name}输入框 {i}") is { } p) problems.Add(p);
+            dialog.Hide(FAContentDialogResult.None);
+            Render();
+            await showing;
+        }
 
-        // 转到行
-        window.KeyPress(Avalonia.Input.Key.G, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.None, null);
-        Render();
-        dialog = FindDialog(window);
-        foreach (var (box, i) in dialog.GetVisualDescendants().OfType<TextBox>().Select((b, i) => (b, i)))
-            if (Check(box, $"转到行输入框 {i}") is { } p) problems.Add(p);
-        dialog.Hide(FAContentDialogResult.None);
-        Render();
-
-        // 更改后缀（自定义）
-        var asking = Dialogs.PromptTextAsync(window, "更改后缀", "新的后缀", ".txt", _ => null);
-        Render();
-        dialog = FindDialog(window);
-        foreach (var (box, i) in dialog.GetVisualDescendants().OfType<TextBox>().Select((b, i) => (b, i)))
-            if (Check(box, $"更改后缀输入框 {i}") is { } p) problems.Add(p);
-        dialog.Hide(FAContentDialogResult.None);
-        await asking;
+        // 文件名（文件名 + 可编辑的后缀下拉框）：保存、重命名、移动到笔记库都用它
+        await CheckDialog("文件名", () => Dialogs.PromptFileNameAsync(window,
+            new FileNamePrompt("重命名", "笔记", ".txt", "重命名", _ => null)));
+        await CheckDialog("转到行", () => Dialogs.PromptLineNumberAsync(window, 1, 100));
+        await CheckDialog("更改后缀", () => Dialogs.PromptTextAsync(window, "更改后缀", "新的后缀", ".txt", _ => null));
 
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }
