@@ -41,6 +41,8 @@ public partial class MainWindow
             (false, false, false, Key.Escape) when _active is { IsPreviewing: true } => Sync(TogglePreview),
             (true, false, false, Key.F) => Sync(() => OpenSearch(replace: false)),
             (true, false, false, Key.H) => Sync(() => OpenSearch(replace: true)),
+            (false, false, false, Key.F3) => Sync(() => FindAgain(previous: false)),
+            (false, true, false, Key.F3) => Sync(() => FindAgain(previous: true)),
             (false, false, false, Key.F5) => Sync(InsertDateTime),
             (true, false, false, Key.OemPlus or Key.Add) => Sync(() => SetZoom(_vm.Zoom + 0.1)),
             (true, false, false, Key.OemMinus or Key.Subtract) => Sync(() => SetZoom(_vm.Zoom - 0.1)),
@@ -175,22 +177,27 @@ public partial class MainWindow
     private void OnExpandClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) Reformat(tab, expand: true); }
     private void OnCompactClick(object? sender, RoutedEventArgs e) { if (_active is { } tab) Reformat(tab, expand: false); }
 
+    /// <summary>打开查找 / 替换面板。不用编辑器里选中的文字填充查找框（保留上次查找的内容）。</summary>
     private void OpenSearch(bool replace)
     {
         if (_active is null) return;
         if (_active.IsPreviewing) SetPreview(_active, false); // 查找在源码中进行
-        var editor = _active.Editor;
-        var panel = editor.SearchPanel;
-        if (panel is null) return;
+        FindPanel.Editor = _active.Editor;
+        FindPanel.Open(replace);
+    }
 
-        // 有选中的单行文本时，作为搜索内容
-        var selected = editor.SelectedText;
-        if (!string.IsNullOrEmpty(selected) && !selected.Contains('\n'))
-            panel.SearchPattern = selected;
-
-        panel.IsReplaceMode = replace;
-        panel.Open();
-        panel.Reactivate();
+    /// <summary>F3 / Shift+F3：按查找框里的内容查找下一个 / 上一个；还没有查找内容时打开面板。</summary>
+    private void FindAgain(bool previous)
+    {
+        if (_active is null) return;
+        if (_active.IsPreviewing) SetPreview(_active, false);
+        FindPanel.Editor = _active.Editor;
+        if (string.IsNullOrEmpty(FindPanel.SearchPattern) || !FindPanel.IsOpen)
+        {
+            FindPanel.Open(replace: false);
+            if (string.IsNullOrEmpty(FindPanel.SearchPattern)) return;
+        }
+        if (previous) FindPanel.FindPrevious(); else FindPanel.FindNext();
     }
 
     private async Task GoToLineAsync()

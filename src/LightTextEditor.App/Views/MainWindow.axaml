@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="using:FluentAvalonia.UI.Controls"
         xmlns:vm="using:LightTextEditor.App.ViewModels"
+        xmlns:views="using:LightTextEditor.App.Views"
         x:Class="LightTextEditor.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding WindowTitle}"
@@ -149,6 +150,10 @@
       </Border.Styles>
       <ui:FAInfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" />
     </Border>
+
+    <!-- 查找 / 替换面板：浮在编辑区右上角（右边留出竖向滚动条的位置），可以拖动（见 FindPanel） -->
+    <views:FindPanel Grid.Row="3" x:Name="FindPanel" ZIndex="11"
+                     VerticalAlignment="Top" HorizontalAlignment="Right" Margin="16,8,24,0" />
 
     <!-- ⑤ 状态栏 -->
     <Border Grid.Row="4" x:Name="StatusBar" Height="28" IsVisible="{Binding ShowStatusBar}"
