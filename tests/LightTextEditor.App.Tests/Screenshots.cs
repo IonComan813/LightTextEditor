@@ -42,6 +42,7 @@ public class Screenshots
         Dispatcher.UIThread.RunJobs();
         window.KeyTextInput("狐狸");
         Dispatcher.UIThread.RunJobs();
+        window.FindPanel.ReplacePattern = "gjpqy 格局"; // 有下伸部分的字母：下半部分不能被截掉
         window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();

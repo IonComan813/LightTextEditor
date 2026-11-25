@@ -29,11 +29,12 @@
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="Focusable" Value="False" />
     </Style>
+    <!-- 不固定高度：Windows 的界面字体（Segoe UI、微软雅黑）行高约为字号的 1.33 倍，
+         固定 28 高、上下各留 4 时，g、j、p 的下半部分会被截掉。最小 28 高（与按钮一样），字大时自动变高 -->
     <Style Selector="TextBox.findBox">
       <Setter Property="Width" Value="240" />
-      <Setter Property="Height" Value="28" />
       <Setter Property="MinHeight" Value="28" />
-      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="Padding" Value="8,3" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="Cursor" Value="Ibeam" />
     </Style>
