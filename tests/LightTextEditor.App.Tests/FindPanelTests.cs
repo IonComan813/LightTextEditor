@@ -325,9 +325,20 @@ public class FindHighlightInkTests
 {
     /// <summary>橙色的上下边缘对齐字形的上下边缘（中文、英文各自按画它的字体），并且在整行高的选中背景之内。</summary>
     [AvaloniaTheory]
-    [InlineData("狐狸", "敏捷的棕色狐狸跳过了懒狗")]
-    [InlineData("HdgHdg", "xx HdgHdg yy")]
-    public void OrangeEdges_MatchTheGlyphInk(string needle, string text)
+    [InlineData("狐狸", "敏捷的棕色狐狸跳过了懒狗", false)]
+    [InlineData("HdgHdg", "xx HdgHdg yy", false)]
+    // 字体里没有参考字（如 CI 的 Ubuntu 没有中文字体，中文画成方框）：用实际画出的墨迹
+    [InlineData("狐狸", "敏捷的棕色狐狸跳过了懒狗", true)]
+    [InlineData("HdgHdg", "xx HdgHdg yy", true)]
+    public void OrangeEdges_MatchTheGlyphInk(string needle, string text, bool fontLacksReference)
+    {
+        var original = LightTextEditor.App.Services.TextInkBand.ReferenceBand;
+        if (fontLacksReference) LightTextEditor.App.Services.TextInkBand.ReferenceBand = (_, _, _) => null;
+        try { CheckOrangeEdges(needle, text); }
+        finally { LightTextEditor.App.Services.TextInkBand.ReferenceBand = original; }
+    }
+
+    private static void CheckOrangeEdges(string needle, string text)
     {
         var library = Path.Combine(TestAppBuilder.Root, "findink-" + Guid.NewGuid().ToString("N"));
         App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
