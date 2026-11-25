@@ -11,6 +11,7 @@ namespace LightTextEditor.App.Services;
 /// 按字体和字号取参考字的墨迹范围：中文等全角字取“国永”，其他取“Hdg”（大写字母顶到下伸部分的底）。
 /// 不用匹配文字自己的墨迹：那样“ace”只有 x 高度，各处高亮高矮不一。
 /// 每段文字可能由不同的字体画（如英文用 Cascadia Mono、中文回退到微软雅黑），按各自的字体分别取，再合并。
+/// 字体里没有参考字时（如没有装中文字体，中文画成方框），改用这段文字实际画出的墨迹。
 /// </para>
 /// </summary>
 internal static class TextInkBand
@@ -19,6 +20,9 @@ internal static class TextInkBand
     private const string OtherReference = "Hdg";
 
     private static readonly Dictionary<(GlyphTypeface, double, bool), (double Above, double Below)?> Cache = new();
+
+    /// <summary>取参考字墨迹范围的方法（测试时可以换掉，模拟字体里没有参考字）。</summary>
+    internal static Func<GlyphTypeface, double, bool, (double Above, double Below)?> ReferenceBand { get; set; } = BandOf;
 
     /// <summary>
     /// 把整行高的矩形 <paramref name="rect"/>（TextView 坐标，已减去滚动）收成其中文字的上下边缘。
@@ -53,7 +57,7 @@ internal static class TextInkBand
             double size = shaped.GlyphRun.FontRenderingEmSize;
             foreach (var (wide, wanted) in new[] { (true, cjk), (false, other) })
             {
-                if (!wanted || BandOf(typeface, size, wide) is not { } band) continue;
+                if (!wanted || (ReferenceBand(typeface, size, wide) ?? InkOf(shaped.GlyphRun)) is not { } band) continue;
                 above = Math.Max(above, band.Above);
                 below = Math.Max(below, band.Below);
                 found = true;
@@ -74,6 +78,21 @@ internal static class TextInkBand
           or >= '︰' and <= '﹏'      // 兼容形式
           or >= '＀' and <= '￯'      // 全角字符
           || char.IsSurrogate(c);             // 扩展区汉字等
+
+    /// <summary>一段已排版文字在基线以上、以下的墨迹高度（像素）。没有墨迹（如全是空格）时为 null。</summary>
+    private static (double Above, double Below)? InkOf(GlyphRun run)
+    {
+        try
+        {
+            var ink = run.InkBounds;
+            double baseline = run.BaselineOrigin.Y;
+            return ink.Height > 0 ? (baseline - ink.Top, ink.Bottom - baseline) : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     /// <summary>参考字在基线以上、以下的墨迹高度（像素）。字体里没有参考字时为 null。</summary>
     private static (double Above, double Below)? BandOf(GlyphTypeface typeface, double size, bool wide)
