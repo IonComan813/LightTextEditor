@@ -43,6 +43,9 @@ public partial class FindPanel : UserControl
     private Point? _dragStart;
     private Vector _dragStartOffset;
 
+    /// <summary>用户放面板的位置（拖动、双击复位）。跳转时为避开匹配项临时挪开，之后不挡时回到这里。</summary>
+    private Vector _home;
+
     public FindPanel()
     {
         InitializeComponent();
@@ -370,6 +373,7 @@ public partial class FindPanel : UserControl
         // 光标放在匹配项末尾（与 AvaloniaEdit 自带的查找相同）；超长的行据此显示光标附近的一段（见 LongLineWindow）
         editor.Select(result.Offset, result.Length);
         EditorScrolling.ScrollCaretIntoView(editor);
+        AvoidMatch(result);
     }
 
     private void UpdateStatus()
@@ -454,7 +458,7 @@ public partial class FindPanel : UserControl
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || Parent is not Visual parent) return;
         if (e.ClickCount == 2)
         {
-            MoveTo(default);
+            MoveTo(default); // 回到右上角
             e.Handled = true;
             return;
         }
@@ -479,16 +483,64 @@ public partial class FindPanel : UserControl
         e.Handled = true;
     }
 
-    internal void MoveTo(Vector offset)
+    /// <summary>移动面板。<paramref name="byUser"/>：用户放的位置（之后避开匹配项后回到这里）。</summary>
+    internal void MoveTo(Vector offset, bool byUser = true)
     {
         var clamped = Clamp(offset);
         _offset.X = clamped.X;
         _offset.Y = clamped.Y;
+        if (byUser) _home = clamped;
     }
 
     private void OnBoundsSizeChanged(object? sender, SizeChangedEventArgs e) => ClampOffset();
 
-    private void ClampOffset() => MoveTo(Offset);
+    private void ClampOffset() => MoveTo(Offset, byUser: false);
+
+    /// <summary>面板在偏移为 <paramref name="offset"/> 时占的区域（父容器坐标）。</summary>
+    private Rect PanelRectAt(Vector offset) => Bounds.Translate(offset);
+
+    /// <summary>
+    /// 跳到匹配项后：面板（在用户放的位置时）挡住了它，就挪到它的正下方或正上方（取挪动少的）；
+    /// 不挡时回到用户放的位置。只在跳转时调用，用户手动把面板拖到匹配项上不管。
+    /// </summary>
+    private void AvoidMatch(ISegment match)
+    {
+        if (_editor is null || Parent is not Visual parent || Bounds.Width <= 0) return;
+        _editor.UpdateLayout();
+        var view = _editor.TextArea.TextView;
+        Rect? target = null;
+        foreach (var r in BackgroundGeometryBuilder.GetRectsForSegment(view, match))
+        {
+            if (view.TranslatePoint(r.TopLeft, parent) is not { } p) continue;
+            var rect = new Rect(p, r.Size);
+            target = target is { } t ? t.Union(rect) : rect;
+        }
+        if (target is not { } m) return;
+        const double gap = 8;
+        var home = Clamp(_home);
+        bool Blocks(Vector o) => PanelRectAt(o).Intersects(m.Inflate(2));
+        if (!Blocks(home))
+        {
+            MoveTo(home, byUser: false);
+            return;
+        }
+
+        Vector? best = null;
+        double Distance(Vector o) => Math.Abs(o.X - home.X) + Math.Abs(o.Y - home.Y);
+        void Consider(Vector o)
+        {
+            o = Clamp(o);
+            if (!Blocks(o) && (best is not { } b || Distance(o) < Distance(b))) best = o;
+        }
+        Consider(new Vector(home.X, m.Bottom + gap - Bounds.Top));                  // 正下方
+        Consider(new Vector(home.X, m.Top - gap - Bounds.Height - Bounds.Top));     // 正上方
+        if (best is null)
+        {
+            Consider(new Vector(m.Left - gap - Bounds.Width - Bounds.Left, home.Y)); // 左边
+            Consider(new Vector(m.Right + gap - Bounds.Left, home.Y));               // 右边
+        }
+        if (best is { } v) MoveTo(v, byUser: false);
+    }
 
     /// <summary>限制偏移量，使面板整个留在编辑区内（面板比编辑区还大时贴住左上角）。</summary>
     private Vector Clamp(Vector offset)
@@ -506,7 +558,8 @@ public partial class FindPanel : UserControl
     // ───────────────────────── 标出匹配项 ─────────────────────────
 
     /// <summary>
-    /// 用橙色标出屏幕上的匹配项，与选中文字（蓝色）区分；当前项就是选中的文字，不再画橙色。
+    /// 用橙色标出屏幕上的所有匹配项（包括当前项）。橙色只有文字那么高，比选中文字的蓝色（整行高）矮一些；
+    /// 画在选中文字的下面，所以当前项是橙色上叠着蓝色，手动选中的其他文字只有蓝色。
     /// 超长的行只看显示出来的一段（折叠掉的部分里可能有几万个匹配项）。
     /// </summary>
     private sealed class MatchRenderer(FindPanel owner) : IBackgroundRenderer
@@ -523,7 +576,7 @@ public partial class FindPanel : UserControl
             var area = editor.TextArea;
             var brush = MatchBrush;
             double radius = area.SelectionCornerRadius;
-            int selStart = editor.SelectionStart, selLength = editor.SelectionLength;
+            double fontSize = editor.FontSize;
 
             foreach (var line in textView.VisualLines)
             {
@@ -534,14 +587,28 @@ public partial class FindPanel : UserControl
                     : owner._matches!.FindOverlappingSegments(start, end - start);
                 foreach (var segment in segments)
                 {
-                    if (segment.Offset == selStart && segment.Length == selLength) continue;
                     int from = Math.Max(segment.Offset, start), to = Math.Min(segment.EndOffset, end);
                     if (to <= from) continue;
                     var piece = new TextSegment { StartOffset = from, EndOffset = to };
                     foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, piece))
-                        drawingContext.DrawRectangle(brush, null, rect, radius, radius);
+                        drawingContext.DrawRectangle(brush, null, TextHeightOnly(textView, line, rect, fontSize), radius, radius);
                 }
             }
+        }
+
+        /// <summary>
+        /// 把整行高的矩形收成文字的高度：以基线为准取一个字号高（中文字形基本占满这个高度），
+        /// 基线上下按默认字体的比例分配。
+        /// </summary>
+        internal static Rect TextHeightOnly(TextView textView, VisualLine line, Rect rect, double fontSize)
+        {
+            double scroll = textView.ScrollOffset.Y;
+            var textLine = line.GetTextLineByVisualYPosition(rect.Center.Y + scroll);
+            double baseline = line.GetTextLineVisualYPosition(textLine, VisualYPosition.Baseline) - scroll;
+            double ratio = textView.DefaultLineHeight > 0 ? textView.DefaultBaseline / textView.DefaultLineHeight : 0.8;
+            double top = Math.Max(rect.Top, baseline - fontSize * ratio);
+            double bottom = Math.Min(rect.Bottom, top + fontSize);
+            return bottom > top ? new Rect(rect.Left, top, rect.Width, bottom - top) : rect;
         }
 
         /// <summary>这一显示行实际显示的文档区间（不含超长行折叠掉的部分）。</summary>

@@ -154,7 +154,7 @@ public class FindPanelTests
     }
 
     [AvaloniaFact]
-    public void Matches_AreHighlightedInOrange()
+    public void Matches_AreHighlightedInOrange_TextHigh_UnderTheSelection()
     {
         var (window, tab) = CreateWindow("abc abc abc");
         Press(window, Key.F, RawInputModifiers.Control);
@@ -162,16 +162,20 @@ public class FindPanelTests
         Render();
         var view = tab.Editor.TextArea.TextView;
         var renderer = Assert.Single(view.BackgroundRenderers, r => r.GetType().DeclaringType == typeof(FindPanel));
+        Assert.Equal(AvaloniaEdit.Rendering.KnownLayer.Selection, renderer.Layer); // 选中文字画在它上面
         var selection = Assert.IsAssignableFrom<ISolidColorBrush>(tab.Editor.TextArea.SelectionBrush);
         var group = new DrawingGroup();
         using (var context = group.Open()) renderer.Draw(view, context);
         var drawn = group.Children.OfType<GeometryDrawing>().ToList();
-        Assert.Equal(2, drawn.Count); // 当前项是选中的文字，不重复画
+        Assert.Equal(3, drawn.Count); // 当前项（选中的）也画橙色
+        double lineHeight = view.DefaultLineHeight;
         Assert.All(drawn, d =>
         {
             var brush = Assert.IsAssignableFrom<ISolidColorBrush>(d.Brush);
-            Assert.NotEqual(selection.Color, brush.Color); // 与选中文字区分
+            Assert.NotEqual(selection.Color, brush.Color);
             Assert.True(brush.Color.R > brush.Color.G && brush.Color.G > brush.Color.B); // 橙色
+            var bounds = d.Geometry!.Bounds;
+            Assert.InRange(bounds.Height, tab.Editor.FontSize - 0.5, lineHeight - 0.5); // 文字高，比整行矮
         });
 
         Press(window, Key.Escape);
@@ -246,6 +250,67 @@ public class FindPanelScrollTests
                 failures.Add($"{(up ? "上" : "下")} 第 {k} 次：行 {caret.Line} 显示在 {top:F0}..{bottom:F0}（可见 0..{view.Bounds.Height:F0}）");
         }
         Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    private static void Render()
+    {
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+    }
+}
+
+public class FindPanelAvoidTests
+{
+    [AvaloniaFact]
+    public void Jumping_MovesThePanelOffTheMatch_AndBackWhenItNoLongerBlocks()
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "findavoid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(library);
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        var window = new MainWindow { Width = 1000, Height = 600 };
+        window.Initialize([]);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var tab = window.ActiveTab!;
+        var lines = Enumerable.Range(0, 40).Select(i => "line " + i).ToList();
+        lines[1] = new string('x', 70) + " NEEDLE"; // 在右上角，面板下面
+        lines[20] = "NEEDLE";                      // 在左边，不挡
+        tab.Doc.Document.Text = string.Join("\n", lines);
+        tab.Editor.TextArea.Focus();
+        Render();
+
+        window.KeyPress(Key.F, RawInputModifiers.Control, PhysicalKey.None, null);
+        Render();
+        var panel = window.FindPanel;
+        var home = panel.Offset;
+        window.KeyTextInput("NEEDLE"); // 边输入边查找：跳到第 2 行的匹配项
+        Render();
+        Assert.Equal(2, tab.Editor.TextArea.Caret.Line);
+        Assert.False(Overlaps(window, tab, panel), "面板挡住了匹配项");
+        Assert.NotEqual(home, panel.Offset);
+
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.None, null); // 下一个在左边：面板回到原处
+        Render();
+        Assert.Equal(21, tab.Editor.TextArea.Caret.Line);
+        Assert.Equal(home, panel.Offset);
+
+        // 用户手动把面板放到匹配项上：不跳转就不挪
+        tab.Editor.Select(tab.Doc.Document.GetLineByNumber(2).Offset + 71, 6);
+        panel.MoveTo(home);
+        Render();
+        Assert.True(Overlaps(window, tab, panel));
+        Assert.Equal(home, panel.Offset);
+    }
+
+    private static bool Overlaps(MainWindow window, DocumentTab tab, FindPanel panel)
+    {
+        var view = tab.Editor.TextArea.TextView;
+        var topLeft = panel.TranslatePoint(default, window)!.Value;
+        var panelRect = new Rect(topLeft, panel.Bounds.Size);
+        var segment = new AvaloniaEdit.Document.TextSegment { StartOffset = tab.Editor.SelectionStart, Length = tab.Editor.SelectionLength };
+        return AvaloniaEdit.Rendering.BackgroundGeometryBuilder.GetRectsForSegment(view, segment)
+            .Any(r => new Rect(view.TranslatePoint(r.TopLeft, window)!.Value, r.Size).Intersects(panelRect));
     }
 
     private static void Render()
