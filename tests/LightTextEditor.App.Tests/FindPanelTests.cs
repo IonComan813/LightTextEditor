@@ -154,7 +154,7 @@ public class FindPanelTests
     }
 
     [AvaloniaFact]
-    public void Matches_AreHighlightedWithTheSelectionBrush()
+    public void Matches_AreHighlightedInOrange()
     {
         var (window, tab) = CreateWindow("abc abc abc");
         Press(window, Key.F, RawInputModifiers.Control);
@@ -162,12 +162,17 @@ public class FindPanelTests
         Render();
         var view = tab.Editor.TextArea.TextView;
         var renderer = Assert.Single(view.BackgroundRenderers, r => r.GetType().DeclaringType == typeof(FindPanel));
-        var brush = Assert.IsAssignableFrom<ISolidColorBrush>(tab.Editor.TextArea.SelectionBrush);
+        var selection = Assert.IsAssignableFrom<ISolidColorBrush>(tab.Editor.TextArea.SelectionBrush);
         var group = new DrawingGroup();
         using (var context = group.Open()) renderer.Draw(view, context);
         var drawn = group.Children.OfType<GeometryDrawing>().ToList();
         Assert.Equal(2, drawn.Count); // 当前项是选中的文字，不重复画
-        Assert.All(drawn, d => Assert.Same(brush, d.Brush));
+        Assert.All(drawn, d =>
+        {
+            var brush = Assert.IsAssignableFrom<ISolidColorBrush>(d.Brush);
+            Assert.NotEqual(selection.Color, brush.Color); // 与选中文字区分
+            Assert.True(brush.Color.R > brush.Color.G && brush.Color.G > brush.Color.B); // 橙色
+        });
 
         Press(window, Key.Escape);
         Assert.False(window.FindPanel.IsOpen);
@@ -198,5 +203,55 @@ public class FindPanelTests
         // 不能拖出编辑区（默认位置离编辑区右边 24、上边 8）
         panel.MoveTo(new Vector(5000, -5000));
         Assert.Equal(new Vector(24, -8), panel.Offset);
+    }
+}
+
+public class FindPanelScrollTests
+{
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FindNext_ScrollsTheMatchIntoView(bool wordWrap)
+    {
+        var library = Path.Combine(TestAppBuilder.Root, "findscroll-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(library);
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false, WordWrap = wordWrap };
+        var window = new MainWindow { Width = 900, Height = 500 };
+        window.Initialize([]);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var tab = window.ActiveTab!;
+        var rng = new Random(1);
+        var lines = Enumerable.Range(0, 600).Select(i =>
+            string.Concat(Enumerable.Repeat("文字 text ", rng.Next(1, 60))) + (i % 37 == 5 ? " NEEDLE" : "")).ToList();
+        tab.Doc.Document.Text = string.Join("\n", lines);
+        tab.Editor.TextArea.Focus();
+        Render();
+
+        window.KeyPress(Key.F, RawInputModifiers.Control, PhysicalKey.None, null);
+        Render();
+        window.FindPanel.SearchPattern = "NEEDLE";
+        Render();
+        var failures = new List<string>();
+        for (int k = 0; k < 40; k++)
+        {
+            bool up = k >= 20;
+            window.KeyPress(Key.Enter, up ? RawInputModifiers.Shift : RawInputModifiers.None, PhysicalKey.None, null);
+            Render();
+            var view = tab.Editor.TextArea.TextView;
+            var caret = tab.Editor.TextArea.Caret.Position;
+            var top = view.GetVisualPosition(caret, AvaloniaEdit.Rendering.VisualYPosition.LineTop).Y - view.ScrollOffset.Y;
+            var bottom = view.GetVisualPosition(caret, AvaloniaEdit.Rendering.VisualYPosition.LineBottom).Y - view.ScrollOffset.Y;
+            if (top < 0 || bottom > view.Bounds.Height)
+                failures.Add($"{(up ? "上" : "下")} 第 {k} 次：行 {caret.Line} 显示在 {top:F0}..{bottom:F0}（可见 0..{view.Bounds.Height:F0}）");
+        }
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    private static void Render()
+    {
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
     }
 }

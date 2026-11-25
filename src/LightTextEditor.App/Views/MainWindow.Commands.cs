@@ -208,7 +208,7 @@ public partial class MainWindow
         if (line is null) return;
         editor.TextArea.Caret.Line = line.Value;
         editor.TextArea.Caret.Column = 1;
-        editor.TextArea.Caret.BringCaretToView();
+        EditorScrolling.ScrollCaretIntoView(editor);
         FocusEditor();
     }
 

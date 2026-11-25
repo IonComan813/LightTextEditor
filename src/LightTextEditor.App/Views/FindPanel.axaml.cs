@@ -369,7 +369,7 @@ public partial class FindPanel : UserControl
         var editor = _editor!;
         // 光标放在匹配项末尾（与 AvaloniaEdit 自带的查找相同）；超长的行据此显示光标附近的一段（见 LongLineWindow）
         editor.Select(result.Offset, result.Length);
-        editor.TextArea.Caret.BringCaretToView();
+        EditorScrolling.ScrollCaretIntoView(editor);
     }
 
     private void UpdateStatus()
@@ -506,11 +506,14 @@ public partial class FindPanel : UserControl
     // ───────────────────────── 标出匹配项 ─────────────────────────
 
     /// <summary>
-    /// 用与选中文字相同的画刷标出屏幕上的匹配项。当前项（即选中的文字）不再重复画，免得颜色叠深。
+    /// 用橙色标出屏幕上的匹配项，与选中文字（蓝色）区分；当前项就是选中的文字，不再画橙色。
     /// 超长的行只看显示出来的一段（折叠掉的部分里可能有几万个匹配项）。
     /// </summary>
     private sealed class MatchRenderer(FindPanel owner) : IBackgroundRenderer
     {
+        /// <summary>半透明的橙色：浅色、深色主题下都保留文字本身的颜色。</summary>
+        internal static readonly IBrush MatchBrush = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0x8C, 0x00));
+
         public KnownLayer Layer => KnownLayer.Selection;
 
         public void Draw(TextView textView, DrawingContext drawingContext)
@@ -518,8 +521,7 @@ public partial class FindPanel : UserControl
             var editor = owner._editor;
             if (editor is null || owner._strategy is null || owner._document is null || !textView.VisualLinesValid) return;
             var area = editor.TextArea;
-            var brush = area.SelectionBrush;
-            if (brush is null) return;
+            var brush = MatchBrush;
             double radius = area.SelectionCornerRadius;
             int selStart = editor.SelectionStart, selLength = editor.SelectionLength;
 
