@@ -9,20 +9,21 @@
       <!-- 固定画布大小，保证缩放比例一致 -->
       <GeometryDrawing Brush="Transparent" Geometry="M0,0 H32 V32 H0 Z" />
 
-      <!-- 纸张 -->
-      <GeometryDrawing Brush="#FFFFFF" Geometry="M6,6.5 A2.5,2.5 0 0 1 8.5,4 H23.5 A2.5,2.5 0 0 1 26,6.5 V27.5 A2.5,2.5 0 0 1 23.5,30 H8.5 A2.5,2.5 0 0 1 6,27.5 Z">
+      <!-- 纸张：撑满画布（宽 24、高 30，左右各留 4、上下各留 1；描边再向外半个单位），
+           与系统和其他程序的图标看起来一样大 -->
+      <GeometryDrawing Brush="#FFFFFF" Geometry="M4,4 A3,3 0 0 1 7,1 H25 A3,3 0 0 1 28,4 V28 A3,3 0 0 1 25,31 H7 A3,3 0 0 1 4,28 Z">
         <GeometryDrawing.Pen>
           <Pen Brush="#7C879A" Thickness="1" />
         </GeometryDrawing.Pen>
       </GeometryDrawing>
       <!-- 顶部装订条 -->
-      <GeometryDrawing Brush="#2F6FED" Geometry="M6,6.5 A2.5,2.5 0 0 1 8.5,4 H23.5 A2.5,2.5 0 0 1 26,6.5 V10 H6 Z" />
+      <GeometryDrawing Brush="#2F6FED" Geometry="M4,4 A3,3 0 0 1 7,1 H25 A3,3 0 0 1 28,4 V8 H4 Z" />
       <!-- 装订孔 -->
-      <GeometryDrawing Brush="#FFFFFF" Geometry="M10,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M16,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 M22,7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0" />
-      <!-- 文字行 -->
-      <GeometryDrawing Geometry="M10,15 H22 M10,19.5 H22 M10,24 H22">
+      <GeometryDrawing Brush="#FFFFFF" Geometry="M9,4.5 m-1.4,0 a1.4,1.4 0 1 0 2.8,0 a1.4,1.4 0 1 0 -2.8,0 M16,4.5 m-1.4,0 a1.4,1.4 0 1 0 2.8,0 a1.4,1.4 0 1 0 -2.8,0 M23,4.5 m-1.4,0 a1.4,1.4 0 1 0 2.8,0 a1.4,1.4 0 1 0 -2.8,0" />
+      <!-- 文字行：线宽 2、中心在奇数坐标上，16 和 32 像素时正好落在整像素上，不发虚 -->
+      <GeometryDrawing Geometry="M9,13 H23 M9,19 H23 M9,25 H23">
         <GeometryDrawing.Pen>
-          <Pen Brush="#A9B3C2" Thickness="1.8" LineCap="Round" />
+          <Pen Brush="#A9B3C2" Thickness="2" LineCap="Round" />
         </GeometryDrawing.Pen>
       </GeometryDrawing>
 
