@@ -316,6 +316,8 @@ public partial class MainWindow : Window
                 if (tab == _active) ApplyViewOptions(tab.Editor); // 改成 / 不再是 Markdown：换行和版面跟着变
             }
         };
+        // 预览中源码被改了（载入磁盘上的版本、以其他编码重新打开等）：用新内容重新渲染
+        doc.Document.TextChanged += (_, _) => { if (tab.IsPreviewing && tab == _active) RefreshPreviewSoon(tab); };
         // Ctrl+V / Shift+Insert：Markdown 文件中可以粘贴图片
         editor.TextArea.AddHandler(KeyDownEvent, async (_, e) =>
         {

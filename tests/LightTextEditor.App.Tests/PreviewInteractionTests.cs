@@ -150,4 +150,43 @@ public class PreviewInteractionTests
         await Settle(3);
         Assert.Equal(bottom, text.Margin.Bottom); // 放得下：没有滚动条，不留空
     }
+
+    /// <summary>预览中显示的全部文字。</summary>
+    private static string PreviewText(DocumentTab tab) =>
+        string.Join("\n", tab.Preview!.GetVisualDescendants().OfType<LiveMarkdown.Avalonia.MarkdownTextBlock>()
+            .Select(t => t is TextBlock tb ? tb.Inlines?.Text ?? tb.Text : t.ToString()));
+
+    [AvaloniaFact]
+    public async Task LoadingTheDiskVersion_WhilePreviewing_RendersTheNewText()
+    {
+        var (window, tab) = await OpenPreviewAsync("# 旧标题\n\n旧的正文\n");
+        Assert.Contains("旧的正文", PreviewText(tab));
+
+        var path = tab.Doc.FilePath!;
+        File.WriteAllText(path, "# 新标题\n\n新的正文\n");
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(5));
+        window.CheckExternalChanges(tab);
+        tab.Doc.Notice!.Actions.Single(a => a.Label == "载入磁盘上的版本").Execute();
+        await Settle();
+
+        Assert.True(tab.IsPreviewing); // 仍在预览
+        var shown = PreviewText(tab);
+        Assert.Contains("新的正文", shown);
+        Assert.DoesNotContain("旧的正文", shown);
+    }
+
+    [AvaloniaFact]
+    public async Task ReopeningWithAnotherEncoding_WhilePreviewing_RendersTheNewText()
+    {
+        var (window, tab) = await OpenPreviewAsync("# 标题\n\n正文\n");
+        Assert.Contains("正文", PreviewText(tab));
+
+        // 以 GB18030 重新打开 UTF-8 文件：文字变成乱码，预览跟着变
+        await window.ReopenWithEncodingAsync(tab.Doc, LightTextEditor.Core.Text.TextEncoding.Gb18030(isCertain: false));
+        await Settle();
+
+        Assert.True(tab.IsPreviewing);
+        Assert.DoesNotContain("正文", tab.Doc.Document.Text);
+        Assert.DoesNotContain("正文", PreviewText(tab));
+    }
 }

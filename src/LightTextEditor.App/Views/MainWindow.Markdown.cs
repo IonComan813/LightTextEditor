@@ -109,6 +109,25 @@ public partial class MainWindow
         return true;
     }
 
+    /// <summary>
+    /// 预览中源码变了：稍后（这一轮改动结束后）用新内容重新渲染，尽量保持滚动位置。
+    /// 预览自己勾选任务时已调用 <see cref="MarkdownPreview.AcceptSourceText"/>，内容相同，不会重新渲染。
+    /// 后台标签页在切到前台时才渲染（见 OnSelectedTabChanged）。
+    /// </summary>
+    private void RefreshPreviewSoon(DocumentTab tab)
+    {
+        if (tab.PreviewRefreshPending) return;
+        tab.PreviewRefreshPending = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            tab.PreviewRefreshPending = false;
+            if (!tab.IsPreviewing || tab != _active || tab.Preview is not { } preview) return;
+            double ratio = preview.ScrollRatio;
+            if (preview.SetMarkdown(tab.Doc.Document.Text, DocumentDirectory(tab.Doc)))
+                preview.ScrollToRatio(ratio);
+        }, DispatcherPriority.Background);
+    }
+
     private static double EditorScrollRatio(TextEditor editor)
     {
         var view = editor.TextArea.TextView;
