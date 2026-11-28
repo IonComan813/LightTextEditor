@@ -18,7 +18,7 @@ public class MainWindowTests
     private static (MainWindow Window, string Library) CreateWindow()
     {
         var library = Path.Combine(TestAppBuilder.Root, "lib-" + Guid.NewGuid().ToString("N"));
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow();
         window.Initialize([]);
         window.Show();
@@ -472,30 +472,42 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
-    public async Task Session_IsSavedOnClose_AndRestored()
+    public async Task Startup_WithoutFiles_OpensOnlyABlankTab_NotLastTimesTabs()
+    {
+        var (window, library) = CreateWindow();
+        Directory.CreateDirectory(library);
+        var a = Path.Combine(library, "s1.txt");
+        File.WriteAllText(a, "aaaa");
+        await window.OpenFilesAsync([a]);
+        window.Close();
+
+        // 直接启动（exe、快捷方式、任务栏图标）：只有一个空白标签页
+        var next = new MainWindow();
+        next.Initialize([]);
+        next.Show();
+        Dispatcher.UIThread.RunJobs();
+        var tab = Assert.Single(next.AllTabs());
+        Assert.True(tab.Doc.IsUntitled);
+    }
+
+    [AvaloniaFact]
+    public async Task Startup_WithAFile_OpensOnlyThatFile()
     {
         var (window, library) = CreateWindow();
         Directory.CreateDirectory(library);
         var a = Path.Combine(library, "s1.txt");
         var b = Path.Combine(library, "s2.txt");
         File.WriteAllText(a, "aaaa");
-        File.WriteAllText(b, "bbbbbbbb");
-        await window.OpenFilesAsync([a, b]);
-        window.NewDocument(); // 未保存的空白标签页不进入会话
-        window.KeyPress(Key.D2, RawInputModifiers.Control, PhysicalKey.Digit2, "2"); // 选中 s1（第 1 个是启动时的空白标签页）
-        Dispatcher.UIThread.RunJobs();
-        window.ActiveTab!.Editor.CaretOffset = 3;
+        File.WriteAllText(b, "bbbb");
+        await window.OpenFilesAsync([a]);
         window.Close();
 
-        App.Settings.RestoreSession = true;
-        var restored = new MainWindow();
-        restored.Initialize([]);
-        restored.Show();
-        Dispatcher.UIThread.RunJobs();
-
-        Assert.Equal([a, b], restored.AllTabs().Select(t => t.Doc.FilePath));
-        Assert.Equal(a, restored.ActiveTab!.Doc.FilePath);
-        Assert.Equal(3, restored.ActiveTab.Editor.CaretOffset);
+        // 打开文件启动：只有这个文件（没有上次的文件，也没有空白标签页）
+        var next = new MainWindow();
+        next.Initialize([b]);
+        next.Show();
+        for (int i = 0; i < 10; i++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
+        Assert.Equal([b], next.AllTabs().Select(t => t.Doc.FilePath));
     }
 
     [AvaloniaFact]
@@ -515,7 +527,7 @@ public class MainWindowTests
     public async Task StartingWithMissingFile_ShowsError_ThenLeavesBlankTab()
     {
         var library = Path.Combine(TestAppBuilder.Root, "lib-" + Guid.NewGuid().ToString("N"));
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow();
         window.Initialize([Path.Combine(library, "不存在.md")]); // 窗口显示之前
         window.Show();
@@ -526,5 +538,37 @@ public class MainWindowTests
         for (int i = 0; i < 10 && window.AllTabs().Count == 0; i++) { await Task.Delay(50); Dispatcher.UIThread.RunJobs(); }
         Assert.Single(window.AllTabs());
         Assert.True(window.ActiveTab!.Doc.IsUntitled);
+    }
+
+    [AvaloniaFact]
+    public void UndoAndRedoMenuItems_AreGrey_WhenThereIsNothingToUndoOrRedo()
+    {
+        var (window, _) = CreateWindow();
+        var edit = window.FindControl<MenuItem>("EditMenu")!;
+        var undo = window.FindControl<MenuItem>("UndoMenuItem")!;
+        var redo = window.FindControl<MenuItem>("RedoMenuItem")!;
+        void OpenEditMenu()
+        {
+            edit.IsSubMenuOpen = false;
+            Dispatcher.UIThread.RunJobs();
+            edit.IsSubMenuOpen = true;
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        OpenEditMenu();
+        Assert.False(undo.IsEnabled); // 新的空白标签页：没有可撤销的
+        Assert.False(redo.IsEnabled);
+
+        Type(window, "abc");
+        OpenEditMenu();
+        Assert.True(undo.IsEnabled);
+        Assert.False(redo.IsEnabled);
+
+        var editor = window.ActiveTab!.Editor;
+        while (editor.CanUndo) editor.Undo();
+        OpenEditMenu();
+        Assert.False(undo.IsEnabled);
+        Assert.True(redo.IsEnabled);
+        edit.IsSubMenuOpen = false;
     }
 }

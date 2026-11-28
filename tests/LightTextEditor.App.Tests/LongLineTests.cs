@@ -22,7 +22,7 @@ public class LongLineTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "long-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false, WordWrap = wordWrap };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, WordWrap = wordWrap };
         var window = new MainWindow { Width = 1000, Height = 700 };
         window.Initialize([]);
         window.Show();
@@ -349,7 +349,7 @@ public class LongLineShots
         Directory.CreateDirectory(dir);
         var library = Path.Combine(TestAppBuilder.Root, "longshot-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false, WordWrap = wordWrap };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, WordWrap = wordWrap };
         var window = new MainWindow { Width = 1000, Height = 560 };
         window.Initialize([]);
         window.Show();

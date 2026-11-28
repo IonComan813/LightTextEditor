@@ -19,7 +19,7 @@ public class ResourceLoadingTests
         var app = Application.Current!;
         var library = Path.Combine(TestAppBuilder.Root, "res-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow();
         window.Initialize([]);
         window.Show();

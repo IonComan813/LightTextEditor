@@ -26,7 +26,7 @@ public class TabStripResizeTests
             File.WriteAllText(p, "x");
             return p;
         }).ToArray();
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(root, "lib"), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(root, "lib") };
         var window = new MainWindow { Width = 700, Height = 300 };
         window.Initialize(files);
         window.Show();

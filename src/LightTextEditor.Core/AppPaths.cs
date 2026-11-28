@@ -27,7 +27,6 @@ public static class AppPaths
     }
 
     public static string SettingsFile => Path.Combine(ConfigDirectory, "settings.json");
-    public static string SessionFile => Path.Combine(ConfigDirectory, "session.json");
 
     /// <summary>编码记录（用户确认过的文件编码）。</summary>
     public static string EncodingMemoryFile => Path.Combine(ConfigDirectory, "encodings.json");

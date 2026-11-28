@@ -13,7 +13,7 @@ public class LineNumberToggleTests
     [AvaloniaFact]
     public void TogglingLineNumbers_WithSeveralTabs_DoesNotCrash()
     {
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "ln"), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "ln") };
         var window = new MainWindow();
         window.Initialize([]);
         window.Show();
@@ -43,7 +43,7 @@ public class LineNumberToggleTests
     [AvaloniaFact]
     public void TabHeader_SelectedIsBold_OthersHideCloseButton()
     {
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "tabs"), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "tabs") };
         var window = new MainWindow();
         window.Initialize([]);
         window.Show();

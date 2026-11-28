@@ -33,7 +33,17 @@ public class JsonStoreTests
     [Fact]
     public void MissingFile_ReturnsDefaults()
     {
-        Assert.Empty(JsonStore.LoadSession("/nonexistent/dir/session.json").Files);
+        Assert.True(JsonStore.LoadSettings("/nonexistent/dir/settings.json").WordWrap);
+    }
+
+    /// <summary>旧版本写的设置文件里还有已经去掉的 restoreSession：照常读取，其余设置不丢。</summary>
+    [Fact]
+    public void OldSettingsWithRemovedRestoreSession_StillLoad()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "lte-" + Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(path, "{\n  \"restoreSession\": true,\n  \"tabSize\": 2\n}");
+        try { Assert.Equal(2, JsonStore.LoadSettings(path).TabSize); }
+        finally { File.Delete(path); }
     }
 
     [Fact]

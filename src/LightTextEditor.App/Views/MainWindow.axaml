@@ -68,9 +68,10 @@
           <MenuItem Header="关闭标签页(_C)" InputGesture="Ctrl+W" Click="OnCloseTabClick" />
           <MenuItem Header="退出(_X)" Click="OnExitClick" />
         </MenuItem>
-        <MenuItem Header="编辑(_E)">
-          <MenuItem Header="撤销(_U)" InputGesture="Ctrl+Z" Click="OnUndoClick" />
-          <MenuItem Header="重做(_R)" InputGesture="Ctrl+Y" Click="OnRedoClick" />
+        <MenuItem Header="编辑(_E)" x:Name="EditMenu" SubmenuOpened="OnEditMenuOpened">
+          <!-- 没有可撤销 / 可重做的操作时显示为灰色（打开菜单时更新） -->
+          <MenuItem Header="撤销(_U)" x:Name="UndoMenuItem" InputGesture="Ctrl+Z" Click="OnUndoClick" />
+          <MenuItem Header="重做(_R)" x:Name="RedoMenuItem" InputGesture="Ctrl+Y" Click="OnRedoClick" />
           <Separator />
           <MenuItem Header="剪切(_T)" InputGesture="Ctrl+X" Click="OnCutClick" />
           <MenuItem Header="复制(_C)" InputGesture="Ctrl+C" Click="OnCopyClick" />

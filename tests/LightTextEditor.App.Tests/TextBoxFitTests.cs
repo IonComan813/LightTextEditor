@@ -26,7 +26,7 @@ public class TextBoxFitTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "fit-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 600 };
         window.Initialize([]);
         window.Show();

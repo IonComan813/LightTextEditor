@@ -28,7 +28,7 @@ public class InlineFormatShot
         if (string.IsNullOrEmpty(dir)) return;
         var library = Path.Combine(TestAppBuilder.Root, "inline-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 420 };
         window.Initialize([]);
         window.Show();

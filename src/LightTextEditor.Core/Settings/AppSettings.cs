@@ -41,9 +41,6 @@ public sealed class AppSettings
     public string EditorFontFamily { get; set; } = "Cascadia Mono, Consolas, Microsoft YaHei UI, Noto Sans Mono CJK SC, monospace";
     public double EditorFontSize { get; set; } = 14;
 
-    /// <summary>启动时重新打开上次关闭时打开着的文件。</summary>
-    public bool RestoreSession { get; set; } = true;
-
     /// <summary>是否已经在笔记库里放过示例（Markdown 示例和 HTML 示例；只在第一次启动时自动放，用户删掉后不再自动生成）。</summary>
     public bool SampleNoteCreated { get; set; }
 

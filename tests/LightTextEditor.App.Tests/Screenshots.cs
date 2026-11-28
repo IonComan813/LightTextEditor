@@ -28,7 +28,7 @@ public class Screenshots
         Avalonia.Application.Current!.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
         var library = Path.Combine(TestAppBuilder.Root, "shots-find-" + theme);
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 560 };
         window.Initialize([]);
         window.Show();
@@ -63,7 +63,7 @@ public class Screenshots
         Avalonia.Application.Current!.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
         var library = Path.Combine(TestAppBuilder.Root, "shots-" + theme);
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
 
         var saved = Path.Combine(library, "读书笔记.txt");
         File.WriteAllText(saved, "# 读书笔记\n\n## 第一章\n\n这是一段已经保存的内容。\nThe quick brown fox jumps over the lazy dog.\n");
@@ -116,7 +116,7 @@ public class Screenshots
         Avalonia.Application.Current!.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
         var library = Path.Combine(TestAppBuilder.Root, "shots-enc-" + theme);
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
 
         Core.Text.TextEncoding.EnsureCodePagesRegistered();
         var path = Path.Combine(library, "旧笔记.txt");
@@ -174,7 +174,7 @@ public class Screenshots
         Directory.CreateDirectory(dir);
         Avalonia.Application.Current!.RequestedThemeVariant = ThemeVariant.Light;
         var library = Path.Combine(TestAppBuilder.Root, "shots-installed");
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         App.IsFirstRunAfterInstall = true;
         var window = new MainWindow { Width = 1000, Height = 560 };
         window.Initialize([]);

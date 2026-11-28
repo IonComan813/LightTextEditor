@@ -17,7 +17,7 @@ public class LibraryTests
         var library = Path.Combine(root, "library");
         var outside = Path.Combine(root, "elsewhere");
         Directory.CreateDirectory(outside);
-        App.Settings = new AppSettings { SampleNoteCreated = sampleCreated, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = sampleCreated, LibraryPath = library };
         var window = new MainWindow { Width = 900, Height = 600 };
         window.Initialize([]);
         window.Show();

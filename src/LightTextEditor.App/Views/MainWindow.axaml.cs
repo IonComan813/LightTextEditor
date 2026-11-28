@@ -136,26 +136,14 @@ public partial class MainWindow : Window
         UpdateThemeMenu();
     }
 
-    /// <summary>启动时调用：恢复窗口位置、上次的标签页，并打开命令行传入的文件。</summary>
+    /// <summary>
+    /// 启动时调用：恢复窗口位置，打开命令行传入的文件。
+    /// 不恢复上次打开着的标签页：直接启动（exe、快捷方式、任务栏图标）只有一个空白标签页，
+    /// 打开文件启动只有那个文件。
+    /// </summary>
     public void Initialize(string[] args)
     {
         RestoreWindowPlacement();
-
-        if (Settings.RestoreSession)
-        {
-            var session = JsonStore.LoadSession();
-            var restored = new List<DocumentTab>();
-            foreach (var f in session.Files)
-            {
-                if (!File.Exists(f.Path)) continue;
-                var tab = TryOpenFileSilently(f.Path);
-                if (tab is null) continue;
-                tab.Doc.CaretOffset = f.CaretOffset;
-                restored.Add(tab);
-            }
-            if (restored.Count > 0)
-                Select(restored[Math.Clamp(session.SelectedIndex, 0, restored.Count - 1)]);
-        }
 
         var files = args.Where(a => !a.StartsWith('-')).ToArray();
 
@@ -1204,19 +1192,6 @@ public partial class MainWindow : Window
         Settings.Window = p;
     }
 
-    private void SaveSession()
-    {
-        var tabs = AllTabs();
-        var saved = tabs.Where(t => t.Doc.FilePath is not null).ToList();
-        if (_active is not null) _active.Doc.CaretOffset = _active.Editor.CaretOffset;
-        var session = new SessionState
-        {
-            Files = saved.Select(t => new SessionFile { Path = t.Doc.FilePath!, CaretOffset = t.Doc.CaretOffset }).ToList(),
-            SelectedIndex = _active is null ? 0 : Math.Max(0, saved.IndexOf(_active)),
-        };
-        try { JsonStore.SaveSession(session); } catch (Exception) { }
-    }
-
     // ───────────────────────── 关闭窗口 ─────────────────────────
 
     protected override void OnClosing(WindowClosingEventArgs e)
@@ -1228,7 +1203,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        SaveSession();
         SaveWindowPlacement();
         App.SaveSettings();
         base.OnClosing(e);
