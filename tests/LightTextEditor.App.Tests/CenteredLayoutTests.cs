@@ -21,7 +21,6 @@ public class CenteredLayoutTests
         Directory.CreateDirectory(library);
         settings.SampleNoteCreated = true;
         settings.LibraryPath = library;
-        settings.RestoreSession = false;
         App.Settings = settings;
         var window = new MainWindow { Width = width, Height = 600 };
         window.Initialize([]);

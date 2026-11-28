@@ -29,6 +29,9 @@ internal sealed class DocumentTab(DocumentViewModel doc, TextEditor editor)
     /// <summary>当前是否显示 Markdown 预览（否则显示源码编辑器）。</summary>
     public bool IsPreviewing { get; set; }
 
+    /// <summary>预览中源码变了，已安排重新渲染（见 MainWindow.RefreshPreviewSoon）。</summary>
+    internal bool PreviewRefreshPending { get; set; }
+
     /// <summary>当前显示这个标签的标签头（标签生成后才有）。</summary>
     public TabHeaderView? Header { get; internal set; }
 

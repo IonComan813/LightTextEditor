@@ -161,6 +161,13 @@ public partial class MainWindow
 
     // ───────────────────────── 编辑菜单 ─────────────────────────
 
+    private void OnEditMenuOpened(object? sender, RoutedEventArgs e)
+    {
+        if (!ReferenceEquals(e.Source, EditMenu)) return; // 子菜单打开时也会冒泡上来
+        UndoMenuItem.IsEnabled = _active?.Editor.CanUndo == true;
+        RedoMenuItem.IsEnabled = _active?.Editor.CanRedo == true;
+    }
+
     private void OnUndoClick(object? sender, RoutedEventArgs e) => _active?.Editor.Undo();
     private void OnRedoClick(object? sender, RoutedEventArgs e) => _active?.Editor.Redo();
     private void OnCutClick(object? sender, RoutedEventArgs e) => _active?.Editor.Cut();

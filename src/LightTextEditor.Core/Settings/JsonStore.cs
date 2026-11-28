@@ -12,7 +12,6 @@ namespace LightTextEditor.Core.Settings;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(AppSettings))]
-[JsonSerializable(typeof(SessionState))]
 [JsonSerializable(typeof(EncodingMemoryData))]
 internal sealed partial class SettingsJsonContext : JsonSerializerContext;
 
@@ -29,11 +28,6 @@ public static class JsonStore
     public static void SaveSettings(AppSettings settings, string? path = null) =>
         Save(path ?? AppPaths.SettingsFile, settings, SettingsJsonContext.Default.AppSettings);
 
-    public static SessionState LoadSession(string? path = null) =>
-        Load(path ?? AppPaths.SessionFile, SettingsJsonContext.Default.SessionState) ?? new SessionState();
-
-    public static void SaveSession(SessionState session, string? path = null) =>
-        Save(path ?? AppPaths.SessionFile, session, SettingsJsonContext.Default.SessionState);
 
     public static EncodingMemoryData LoadEncodingMemory(string? path = null) =>
         Load(path ?? AppPaths.EncodingMemoryFile, SettingsJsonContext.Default.EncodingMemoryData) ?? new EncodingMemoryData();

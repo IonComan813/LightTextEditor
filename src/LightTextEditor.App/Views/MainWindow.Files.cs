@@ -697,7 +697,7 @@ public partial class MainWindow
 
     // ───────────────────────── 编码 / 换行符 ─────────────────────────
 
-    private async Task ReopenWithEncodingAsync(DocumentViewModel doc, TextEncoding encoding)
+    internal async Task ReopenWithEncodingAsync(DocumentViewModel doc, TextEncoding encoding)
     {
         if (doc.FilePath is null) return;
         if (doc.IsDirty && !await Dialogs.ConfirmAsync(this, "重新打开",

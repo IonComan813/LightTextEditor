@@ -16,7 +16,7 @@ public class ImePreeditTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 600 };
         window.Initialize([]);
         window.Show();
@@ -71,7 +71,7 @@ public class ImePreeditTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 600 };
         window.Initialize([]);
         window.Show();
@@ -101,7 +101,7 @@ public class ImePreeditTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false, ImeDebugLog = true };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, ImeDebugLog = true };
         try
         {
             var window = new MainWindow { Width = 1000, Height = 600 };
@@ -139,7 +139,7 @@ public class ImePreeditTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "ime-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 600 };
         window.Initialize([]);
         window.Show();

@@ -15,7 +15,7 @@ public class TabContextMenuTests
     [InlineData(true)]
     public async Task RightClickOnTab_OpensContextMenu(bool tabItemHandlesRelease)
     {
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "ctx-" + Guid.NewGuid().ToString("N")), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "ctx-" + Guid.NewGuid().ToString("N")) };
         var window = new MainWindow { Width = 1000, Height = 500 };
         window.Initialize([]);
         window.Show();

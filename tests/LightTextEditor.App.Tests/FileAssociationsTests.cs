@@ -108,7 +108,7 @@ public class FileAssociationsTests
         try
         {
             var library = Path.Combine(TestAppBuilder.Root, "fa-" + Guid.NewGuid().ToString("N"));
-            App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+            App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
             App.IsFirstRunAfterInstall = true;
             var window = new MainWindow();
             window.Initialize([]);

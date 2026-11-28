@@ -21,7 +21,7 @@ public class TabStripOverflowTests
             File.WriteAllText(p, "x");
             return p;
         }).ToArray();
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(root, "lib"), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(root, "lib") };
         var window = new MainWindow { Width = 1100, Height = 400 };
         window.Initialize(files);
         window.Show();

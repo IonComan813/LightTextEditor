@@ -17,7 +17,7 @@ public class MenuHoverTests
     [AvaloniaFact]
     public async Task MovingFromSubmenuItemToDisabledItem_ClearsHighlight()
     {
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "menu-" + Guid.NewGuid().ToString("N")), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "menu-" + Guid.NewGuid().ToString("N")) };
         var window = new MainWindow { Width = 1000, Height = 700 };
         window.Initialize([]);
         window.Show();
@@ -50,7 +50,7 @@ public class MenuHoverTests
     [AvaloniaFact]
     public void ClickingEmptyMenuBar_ClosesOpenMenu()
     {
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "menu-" + Guid.NewGuid().ToString("N")), RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = Path.Combine(TestAppBuilder.Root, "menu-" + Guid.NewGuid().ToString("N")) };
         var window = new MainWindow { Width = 1000, Height = 700 };
         window.Initialize([]);
         window.Show();

@@ -29,7 +29,7 @@ public class SampleShot
             using (var s = AssetLoader.Open(new Uri("avares://LightTextEditor/Assets/Samples/sample-image.png")))
             using (var f = File.Create(Path.Combine(library, "assets", "示例图片.png"))) s.CopyTo(f);
 
-            App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+            App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
             var window = new MainWindow { Width = 1000, Height = 5600 };
             window.Initialize([]);
             window.Show();

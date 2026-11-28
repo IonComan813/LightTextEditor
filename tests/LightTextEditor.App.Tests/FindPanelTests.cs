@@ -19,7 +19,7 @@ public class FindPanelTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "find-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 600 };
         window.Initialize([]);
         window.Show();
@@ -219,7 +219,7 @@ public class FindPanelScrollTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "findscroll-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false, WordWrap = wordWrap };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, WordWrap = wordWrap };
         var window = new MainWindow { Width = 900, Height = 500 };
         window.Initialize([]);
         window.Show();
@@ -267,7 +267,7 @@ public class FindPanelAvoidTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "findavoid-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 600 };
         window.Initialize([]);
         window.Show();
@@ -341,7 +341,7 @@ public class FindHighlightInkTests
     private static void CheckOrangeEdges(string needle, string text)
     {
         var library = Path.Combine(TestAppBuilder.Root, "findink-" + Guid.NewGuid().ToString("N"));
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 1000, Height = 600 };
         window.Initialize([]);
         window.Show();

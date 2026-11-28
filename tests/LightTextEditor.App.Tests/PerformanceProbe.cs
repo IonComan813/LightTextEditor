@@ -38,7 +38,7 @@ public class PerformanceProbe
     {
         library = Path.Combine(TestAppBuilder.Root, "perf-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false,
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library,
             WordWrap = Environment.GetEnvironmentVariable("PERF_WRAP") != "0" };
         var window = new MainWindow { Width = 1000, Height = 700 };
         window.Initialize([]);

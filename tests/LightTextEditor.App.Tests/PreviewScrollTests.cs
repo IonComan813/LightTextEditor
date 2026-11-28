@@ -15,7 +15,7 @@ public class PreviewScrollTests
     {
         var library = Path.Combine(TestAppBuilder.Root, "scroll-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(library);
-        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library, RestoreSession = false };
+        App.Settings = new AppSettings { SampleNoteCreated = true, LibraryPath = library };
         var window = new MainWindow { Width = 900, Height = 600 };
         window.Initialize([]);
         window.Show();

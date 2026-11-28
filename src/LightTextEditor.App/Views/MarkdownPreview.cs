@@ -73,15 +73,19 @@ internal sealed class MarkdownPreview : ScrollViewer
         Content = _zoomHost;
     }
 
-    /// <summary>显示 Markdown 文本。<paramref name="baseDirectory"/> 用于解析相对路径的图片。</summary>
-    public void SetMarkdown(string text, string baseDirectory)
+    /// <summary>
+    /// 显示 Markdown 文本。<paramref name="baseDirectory"/> 用于解析相对路径的图片。
+    /// 返回是否重新渲染了（内容和图片目录都没变时不渲染，切换标签时保持原样）。
+    /// </summary>
+    public bool SetMarkdown(string text, string baseDirectory)
     {
         bool sameBase = _renderer.ImageBasePath == baseDirectory;
         _renderer.ImageBasePath = baseDirectory;
-        if (sameBase && text == _text) return; // 内容没变就不重新渲染（切换标签时保持原样）
+        if (sameBase && text == _text) return false;
         _text = text;
         _markdown.Clear();
         _markdown.Append(text);
+        return true;
     }
 
     /// <summary>源码被预览自身改动（勾选任务）后调用：显示的内容已经一致，下次不用重新渲染。</summary>
